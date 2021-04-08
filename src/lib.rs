@@ -179,6 +179,14 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
         }
     }
 
+    /// Vertically concatenates the two matrices.
+    /// ```
+    /// # use safemat::*;
+    /// let a = mat![ 1, 2 ; 3, 4 ];
+    /// let b = mat![ 5, 6 ];
+    /// let c = a.vcat(b).patch_m();
+    /// assert_eq!(c, mat![ 1, 2 ; 3, 4 ; 5, 6 ]);
+    /// ```
     pub fn vcat<M2: Dim>(self, other: Matrix<T, M2, N>) -> Matrix<T, Plus<M, M2>, N> {
         let mut items = Vec::from(self.items);
         items.extend(Vec::from(other.items).into_iter());
