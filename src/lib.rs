@@ -3,11 +3,10 @@ use std::{
     ops::{Index, IndexMut, Mul},
 };
 
+pub use num_traits::{One, Zero};
+
 mod dim;
 pub use dim::{Dim, Fixed, FixedDim, Plus};
-
-pub mod num;
-use num::{One, Zero};
 
 pub mod iter;
 
