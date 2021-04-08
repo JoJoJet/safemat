@@ -10,12 +10,28 @@ pub use dim::{Dim, Fixed, FixedDim, Plus};
 
 pub mod iter;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Matrix<T, M, N> {
     m: M,
     n: N,
     items: Box<[T]>,
 }
+
+impl<T, M1, M2, N1, N2> PartialEq<Matrix<T, M2, N2>> for Matrix<T, M1, N1>
+where
+    T: PartialEq,
+    M1: Dim,
+    M2: Dim + Into<M1>,
+    N1: Dim,
+    N2: Dim + Into<N1>,
+{
+    fn eq(&self, rhs: &Matrix<T, M2, N2>) -> bool {
+        debug_assert_eq!(self.m.dim(), rhs.m.dim());
+        debug_assert_eq!(self.n.dim(), rhs.n.dim());
+        self.items.eq(&rhs.items)
+    }
+}
+impl<T: Eq, M: Dim, N: Dim> Eq for Matrix<T, M, N> {}
 
 impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     #[inline]
@@ -184,7 +200,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// # use safemat::*;
     /// let a = mat![ 1, 2 ; 3, 4 ];
     /// let b = mat![ 5, 6 ];
-    /// let c = a.vcat(b).patch_m();
+    /// let c = a.vcat(b);
     /// assert_eq!(c, mat![ 1, 2 ; 3, 4 ; 5, 6 ]);
     /// ```
     pub fn vcat<M2: Dim>(self, other: Matrix<T, M2, N>) -> Matrix<T, Plus<M, M2>, N> {
@@ -205,7 +221,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// # use safemat::*;
     /// let a = mat![ 1 ; 2 ; 3 ];
     /// let b = mat![ 4 ; 5 ; 6 ];
-    /// let c = a.hcat(b).patch_n();
+    /// let c = a.hcat(b);
     /// assert_eq!(c, mat![ 1, 4 ; 2, 5 ; 3, 6 ]);
     /// ```
     pub fn hcat<N2: Dim>(self, other: Matrix<T, M, N2>) -> Matrix<T, M, Plus<N, N2>> {
@@ -399,6 +415,6 @@ mod tests {
         let b = mat![4, 5, 6];
 
         let c = a.vcat(b);
-        assert_eq!(c.coerce_m().unwrap(), mat![1, 2, 3 ; 4, 5, 6]);
+        assert_eq!(c, mat![1, 2, 3 ; 4, 5, 6]);
     }
 }
