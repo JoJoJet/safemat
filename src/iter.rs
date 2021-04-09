@@ -231,7 +231,11 @@ impl<'a, T, M: Dim, N: Dim> Iterator for Rows<'a, T, M, N> {
         if self.i < self.mat.m.dim() {
             let i = self.i;
             self.i += 1;
-            Some(RowView { mat: self.mat, i })
+            Some(RowView {
+                mat: self.mat,
+                i,
+                j_iter: 0,
+            })
         } else {
             None
         }
@@ -273,7 +277,11 @@ impl<'a, T, M: Dim, N: Dim> Iterator for Columns<'a, T, M, N> {
         if self.j < self.mat.n.dim() {
             let j = self.j;
             self.j += 1;
-            Some(ColumnView { mat: self.mat, j })
+            Some(ColumnView {
+                mat: self.mat,
+                j,
+                i_iter: 0,
+            })
         } else {
             None
         }
