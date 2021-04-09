@@ -1,6 +1,9 @@
 use super::*;
 
-use std::{iter::Enumerate, marker::PhantomData};
+use std::{
+    iter::{Enumerate, FusedIterator},
+    marker::PhantomData,
+};
 
 pub struct IntoIter<T, M: Dim, N: Dim> {
     _m: PhantomData<M>,
@@ -125,6 +128,94 @@ impl<T, M: Dim, N: Dim> DoubleEndedIterator for IterMut<'_, T, M, N> {
 
 impl<T, M: Dim, N: Dim> ExactSizeIterator for IterMut<'_, T, M, N> {}
 
+
+/// An iterator over the rows of a matrix.
+/// ```
+/// # use safemat::*;
+/// let mat = mat![ 1, 2, 3 ; 4, 5, 6 ; 7, 8, 9 ];
+/// let mut i = mat.rows();
+/// assert_eq!(i.next(), Some([1, 2, 3].as_ref()));
+/// assert_eq!(i.next(), Some([4, 5, 6].as_ref()));
+/// assert_eq!(i.next(), Some([7, 8, 9].as_ref()));
+/// assert_eq!(i.next(), None);
+/// ```
+pub struct Rows<'a, T, M: Dim, N: Dim> {
+    mat: &'a Matrix<T, M, N>,
+    i: usize,
+}
+
+impl<'a, T, M: Dim, N: Dim> Iterator for Rows<'a, T, M, N> {
+    type Item = &'a [T];
+    fn next(&mut self) -> Option<Self::Item> {
+        let n = self.mat.n.dim();
+        let i = self.i;
+        self.i += 1;
+        if self.i <= self.mat.m.dim() {
+            Some(&self.mat.items[i * n..self.i * n])
+        } else {
+            None
+        }
+    }
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+}
+
+impl<T, M: Dim, N: Dim> ExactSizeIterator for Rows<'_, T, M, N> {
+    fn len(&self) -> usize {
+        self.mat.m.dim().checked_sub(self.i).unwrap_or(0)
+    }
+}
+
+impl<T, M: Dim, N: Dim> FusedIterator for Rows<'_, T, M, N> {}
+
+/// An iterator over the columns of a matrix.
+/// ```
+/// # use safemat::*;
+/// let mat = mat![ 1, 2, 3 ; 4, 5, 6 ; 7, 8, 9 ];
+/// let mut i = mat.columns();
+/// assert_eq!(&*i.next().unwrap(), [&1, &4, &7].as_ref());
+/// assert_eq!(&*i.next().unwrap(), [&2, &5, &8].as_ref());
+/// assert_eq!(&*i.next().unwrap(), [&3, &6, &9].as_ref());
+/// assert_eq!(i.next(), None);
+/// ```
+pub struct Columns<'a, T, M: Dim, N: Dim> {
+    mat: &'a Matrix<T, M, N>,
+    j: usize,
+}
+
+impl<'a, T, M: Dim, N: Dim> Iterator for Columns<'a, T, M, N> {
+    type Item = Box<[&'a T]>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let n = self.mat.n.dim();
+        let j = self.j;
+        self.j += 1;
+        if self.j <= n {
+            let mut v = Vec::with_capacity(n);
+            for i in 0..n {
+                v.push(&self.mat[[i, j]]);
+            }
+            Some(v.into_boxed_slice())
+        } else {
+            None
+        }
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+}
+
+impl<T, M: Dim, N: Dim> ExactSizeIterator for Columns<'_, T, M, N> {
+    fn len(&self) -> usize {
+        self.mat.n.dim().checked_sub(self.j).unwrap_or(0)
+    }
+}
+
+impl<T, M: Dim, N: Dim> FusedIterator for Columns<'_, T, M, N> {}
+
 impl<T, M: Dim, N: Dim> IntoIterator for Matrix<T, M, N> {
     type Item = (usize, usize, T);
     type IntoIter = IntoIter<T, M, N>;
@@ -173,5 +264,15 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     #[inline]
     pub fn iter_mut(&mut self) -> IterMut<'_, T, M, N> {
         self.into_iter()
+    }
+
+    #[inline]
+    pub fn rows(&self) -> Rows<'_, T, M, N> {
+        Rows { mat: self, i: 0 }
+    }
+
+    #[inline]
+    pub fn columns(&self) -> Columns<'_, T, M, N> {
+        Columns { mat: self, j: 0 }
     }
 }
