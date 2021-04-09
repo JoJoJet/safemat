@@ -257,9 +257,9 @@ impl<T, M: Dim, N: Dim> FusedIterator for Rows<'_, T, M, N> {}
 /// # use safemat::*;
 /// let mat = mat![ 1, 2, 3 ; 4, 5, 6 ; 7, 8, 9 ];
 /// let mut i = mat.columns();
-/// assert_eq!(&*i.next().unwrap(), [&1, &4, &7].as_ref());
-/// assert_eq!(&*i.next().unwrap(), [&2, &5, &8].as_ref());
-/// assert_eq!(&*i.next().unwrap(), [&3, &6, &9].as_ref());
+/// assert_eq!(i.next().unwrap(), [1, 4, 7].as_ref());
+/// assert_eq!(i.next().unwrap(), [2, 5, 8].as_ref());
+/// assert_eq!(i.next().unwrap(), [3, 6, 9].as_ref());
 /// assert_eq!(i.next(), None);
 /// ```
 pub struct Columns<'a, T, M: Dim, N: Dim> {
@@ -268,17 +268,12 @@ pub struct Columns<'a, T, M: Dim, N: Dim> {
 }
 
 impl<'a, T, M: Dim, N: Dim> Iterator for Columns<'a, T, M, N> {
-    type Item = Box<[&'a T]>;
+    type Item = ColumnView<'a, T, M, N>;
     fn next(&mut self) -> Option<Self::Item> {
-        let n = self.mat.n.dim();
-        let j = self.j;
-        self.j += 1;
-        if self.j <= n {
-            let mut v = Vec::with_capacity(n);
-            for i in 0..n {
-                v.push(&self.mat[[i, j]]);
-            }
-            Some(v.into_boxed_slice())
+        if self.j < self.mat.n.dim() {
+            let j = self.j;
+            self.j += 1;
+            Some(ColumnView { mat: self.mat, j })
         } else {
             None
         }
