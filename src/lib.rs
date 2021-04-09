@@ -76,7 +76,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// ```
     pub fn transpose(self) -> Matrix<T, N, M> {
         let mut result = Matrix::<Option<T>, _, _>::default_with_dim(self.n, self.m);
-        for (i, j, itm) in self.into_iter() {
+        for (i, j, itm) in self.into_iter().indices() {
             result[[j, i]] = Some(itm);
         }
         result.map(|_, _, itm| itm.unwrap())
@@ -100,7 +100,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
         let m = self.m;
         let n = self.n;
         let mut items = Vec::with_capacity(m.dim() * n.dim());
-        items.extend(self.into_iter().map(|(i, j, itm)| f(i, j, itm)));
+        items.extend(self.into_iter().indices().map(|(i, j, itm)| f(i, j, itm)));
         debug_assert_eq!(items.len(), m.dim() * n.dim());
         Matrix {
             m,

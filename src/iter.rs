@@ -5,19 +5,88 @@ use std::{
     marker::PhantomData,
 };
 
+/// An iterator over a matrix that yields the indices of the current element.
+/// ```
+/// # use safemat::*;
+/// let mat = mat![ 1, 2 ; 3, 4 ];
+/// let mut i = mat.iter().indices();
+/// assert_eq!(i.next(), Some((0, 0, &1)));
+/// assert_eq!(i.next(), Some((0, 1, &2)));
+/// assert_eq!(i.next(), Some((1, 0, &3)));
+/// assert_eq!(i.next(), Some((1, 1, &4)));
+/// assert_eq!(i.next(), None);
+/// ```
+pub struct Indices<I: Iterator, M: Dim, N: Dim> {
+    _m: PhantomData<M>,
+    n: N,
+    iter: Enumerate<I>,
+}
+
+impl<I: Iterator, M: Dim, N: Dim> Iterator for Indices<I, M, N> {
+    type Item = (usize, usize, I::Item);
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let (idx, itm) = self.iter.next()?;
+        let n = self.n.dim();
+        Some((idx / n, idx % n, itm))
+    }
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
+impl<I, M: Dim, N: Dim> DoubleEndedIterator for Indices<I, M, N>
+where
+    I: DoubleEndedIterator + ExactSizeIterator,
+{
+    #[inline]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let (idx, itm) = self.iter.next_back()?;
+        let n = self.n.dim();
+        Some((idx / n, idx % n, itm))
+    }
+}
+
+impl<I: ExactSizeIterator, M: Dim, N: Dim> ExactSizeIterator for Indices<I, M, N> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.iter.len()
+    }
+}
+
+impl<I: FusedIterator, M: Dim, N: Dim> FusedIterator for Indices<I, M, N> {}
+
+/// An iterator that moves out of a matrix.
+/// ```
+/// # use safemat::*;
+/// let mat = mat![ 1 ; 2 ];
+/// let mut i = mat.into_iter();
+/// assert_eq!(i.next(), Some(1));
+/// assert_eq!(i.next(), Some(2));
+/// assert_eq!(i.next(), None);
+/// ```
 pub struct IntoIter<T, M: Dim, N: Dim> {
     _m: PhantomData<M>,
     n: N,
     iter: Enumerate<std::vec::IntoIter<T>>,
 }
 
+impl<T, M: Dim, N: Dim> IntoIter<T, M, N> {
+    #[inline]
+    pub fn indices(self) -> Indices<impl Iterator<Item = T>, M, N> {
+        Indices {
+            _m: PhantomData,
+            n: self.n,
+            iter: self.iter,
+        }
+    }
+}
+
 impl<T, M: Dim, N: Dim> Iterator for IntoIter<T, M, N> {
-    type Item = (usize, usize, T);
+    type Item = T;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let (idx, itm) = self.iter.next()?;
-        let n = self.n.dim();
-        Some((idx / n, idx % n, itm))
+        self.iter.next().map(|(_, itm)| itm)
     }
 
     #[inline]
@@ -28,25 +97,23 @@ impl<T, M: Dim, N: Dim> Iterator for IntoIter<T, M, N> {
 
 impl<T, M: Dim, N: Dim> DoubleEndedIterator for IntoIter<T, M, N> {
     #[inline]
-    fn next_back(&mut self) -> Option<(usize, usize, T)> {
-        let (idx, itm) = self.iter.next_back()?;
-        let n = self.n.dim();
-        Some((idx / n, idx % n, itm))
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.iter.next_back().map(|(_, itm)| itm)
     }
 }
 
 impl<T, M: Dim, N: Dim> ExactSizeIterator for IntoIter<T, M, N> {}
 
-/// An iterator over the references to the items in a matrix,
-/// as well as the respective indices of the items.
+/// An iterator over the references to the items in a matrix.
+/// To get the indices of each item, see the `indices` method.
 /// ```
 /// # use safemat::*;
 /// let m = mat![ 1, 2 ; 3, 4 ];
 /// let mut i = m.iter();
-/// assert_eq!(i.next(), Some((0, 0, &1)));
-/// assert_eq!(i.next(), Some((0, 1, &2)));
-/// assert_eq!(i.next(), Some((1, 0, &3)));
-/// assert_eq!(i.next(), Some((1, 1, &4)));
+/// assert_eq!(i.next(), Some(&1));
+/// assert_eq!(i.next(), Some(&2));
+/// assert_eq!(i.next(), Some(&3));
+/// assert_eq!(i.next(), Some(&4));
 /// assert_eq!(i.next(), None);
 /// ```
 pub struct Iter<'a, T, M: Dim, N: Dim> {
@@ -55,13 +122,22 @@ pub struct Iter<'a, T, M: Dim, N: Dim> {
     iter: Enumerate<std::slice::Iter<'a, T>>,
 }
 
+impl<'a, T, M: Dim, N: Dim> Iter<'a, T, M, N> {
+    #[inline]
+    pub fn indices(self) -> Indices<impl Iterator<Item = &'a T>, M, N> {
+        Indices {
+            _m: PhantomData,
+            n: self.n,
+            iter: self.iter,
+        }
+    }
+}
+
 impl<'a, T, M: Dim, N: Dim> Iterator for Iter<'a, T, M, N> {
-    type Item = (usize, usize, &'a T);
+    type Item = &'a T;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let (idx, itm) = self.iter.next()?;
-        let n = self.n.dim();
-        Some((idx / n, idx % n, itm))
+        self.iter.next().map(|(_, itm)| itm)
     }
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -72,9 +148,7 @@ impl<'a, T, M: Dim, N: Dim> Iterator for Iter<'a, T, M, N> {
 impl<T, M: Dim, N: Dim> DoubleEndedIterator for Iter<'_, T, M, N> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        let (idx, itm) = self.iter.next_back()?;
-        let n = self.n.dim();
-        Some((idx / n, idx % n, itm))
+        self.iter.next_back().map(|(_, itm)| itm)
     }
 }
 
@@ -88,7 +162,7 @@ impl<T, M: Dim, N: Dim> ExactSizeIterator for Iter<'_, T, M, N> {}
 ///     [ 4, 5, 6 ],
 ///     [ 7, 8, 9 ],
 /// ]);
-/// for (i, j, itm) in &mut m {
+/// for (i, j, itm) in m.iter_mut().indices() {
 ///    *itm += i * j;
 /// }
 /// assert_eq!(m, Matrix::from_array([
@@ -103,13 +177,22 @@ pub struct IterMut<'a, T, M: Dim, N: Dim> {
     iter: Enumerate<std::slice::IterMut<'a, T>>,
 }
 
+impl<'a, T, M: Dim, N: Dim> IterMut<'a, T, M, N> {
+    #[inline]
+    pub fn indices(self) -> Indices<impl Iterator<Item = &'a mut T>, M, N> {
+        Indices {
+            _m: PhantomData,
+            n: self.n,
+            iter: self.iter,
+        }
+    }
+}
+
 impl<'a, T, M: Dim, N: Dim> Iterator for IterMut<'a, T, M, N> {
-    type Item = (usize, usize, &'a mut T);
+    type Item = &'a mut T;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let (idx, itm) = self.iter.next()?;
-        let n = self.n.dim();
-        Some((idx / n, idx % n, itm))
+        self.iter.next().map(|(_, itm)| itm)
     }
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -120,14 +203,11 @@ impl<'a, T, M: Dim, N: Dim> Iterator for IterMut<'a, T, M, N> {
 impl<T, M: Dim, N: Dim> DoubleEndedIterator for IterMut<'_, T, M, N> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        let (idx, itm) = self.iter.next_back()?;
-        let n = self.n.dim();
-        Some((idx / n, idx % n, itm))
+        self.iter.next_back().map(|(_, itm)| itm)
     }
 }
 
 impl<T, M: Dim, N: Dim> ExactSizeIterator for IterMut<'_, T, M, N> {}
-
 
 /// An iterator over the rows of a matrix.
 /// ```
@@ -164,6 +244,7 @@ impl<'a, T, M: Dim, N: Dim> Iterator for Rows<'a, T, M, N> {
 }
 
 impl<T, M: Dim, N: Dim> ExactSizeIterator for Rows<'_, T, M, N> {
+    #[inline]
     fn len(&self) -> usize {
         self.mat.m.dim().checked_sub(self.i).unwrap_or(0)
     }
@@ -217,7 +298,7 @@ impl<T, M: Dim, N: Dim> ExactSizeIterator for Columns<'_, T, M, N> {
 impl<T, M: Dim, N: Dim> FusedIterator for Columns<'_, T, M, N> {}
 
 impl<T, M: Dim, N: Dim> IntoIterator for Matrix<T, M, N> {
-    type Item = (usize, usize, T);
+    type Item = T;
     type IntoIter = IntoIter<T, M, N>;
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -230,7 +311,7 @@ impl<T, M: Dim, N: Dim> IntoIterator for Matrix<T, M, N> {
 }
 
 impl<'a, T, M: Dim, N: Dim> IntoIterator for &'a Matrix<T, M, N> {
-    type Item = (usize, usize, &'a T);
+    type Item = &'a T;
     type IntoIter = Iter<'a, T, M, N>;
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -243,7 +324,7 @@ impl<'a, T, M: Dim, N: Dim> IntoIterator for &'a Matrix<T, M, N> {
 }
 
 impl<'a, T, M: Dim, N: Dim> IntoIterator for &'a mut Matrix<T, M, N> {
-    type Item = (usize, usize, &'a mut T);
+    type Item = &'a mut T;
     type IntoIter = IterMut<'a, T, M, N>;
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
