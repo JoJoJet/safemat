@@ -1,4 +1,5 @@
 use super::*;
+use crate::view::*;
 
 use std::{
     iter::{Enumerate, FusedIterator},
@@ -212,11 +213,11 @@ impl<T, M: Dim, N: Dim> ExactSizeIterator for IterMut<'_, T, M, N> {}
 /// An iterator over the rows of a matrix.
 /// ```
 /// # use safemat::*;
-/// let mat = mat![ 1, 2, 3 ; 4, 5, 6 ; 7, 8, 9 ];
+/// let mat = mat![ 1, 2 ; 3, 4 ; 5, 6 ];
 /// let mut i = mat.rows();
-/// assert_eq!(i.next(), Some([1, 2, 3].as_ref()));
-/// assert_eq!(i.next(), Some([4, 5, 6].as_ref()));
-/// assert_eq!(i.next(), Some([7, 8, 9].as_ref()));
+/// assert_eq!(i.next().unwrap(), [1, 2].as_ref());
+/// assert_eq!(i.next().unwrap(), [3, 4].as_ref());
+/// assert_eq!(i.next().unwrap(), [5, 6].as_ref());
 /// assert_eq!(i.next(), None);
 /// ```
 pub struct Rows<'a, T, M: Dim, N: Dim> {
@@ -225,13 +226,12 @@ pub struct Rows<'a, T, M: Dim, N: Dim> {
 }
 
 impl<'a, T, M: Dim, N: Dim> Iterator for Rows<'a, T, M, N> {
-    type Item = &'a [T];
+    type Item = RowView<'a, T, M, N>;
     fn next(&mut self) -> Option<Self::Item> {
-        let n = self.mat.n.dim();
-        let i = self.i;
-        self.i += 1;
-        if self.i <= self.mat.m.dim() {
-            Some(&self.mat.items[i * n..self.i * n])
+        if self.i < self.mat.m.dim() {
+            let i = self.i;
+            self.i += 1;
+            Some(RowView { mat: self.mat, i })
         } else {
             None
         }

@@ -8,6 +8,8 @@ pub use num_traits::{One, Zero};
 mod dim;
 pub use dim::{Dim, Fixed, FixedDim, Plus};
 
+pub mod view;
+
 pub mod iter;
 
 #[derive(Clone, Debug)]
