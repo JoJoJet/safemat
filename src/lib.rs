@@ -180,28 +180,43 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
         }
     }
 
-    /// Coerces M to a known fixed dimension.
-    pub fn coerce_m<M2: FixedDim>(self) -> Result<Matrix<T, M2, N>, CoerceError> {
-        if self.m.dim() == M2::DIM {
+    /// Tries to convert `M` to a known fixed dimension.
+    /// ```
+    /// # use safemat::*;
+    /// let len = 4; // a variable with some unknown value.
+    /// let mat = Matrix::from_fn_with_dim(dim!(len), dim!(1), |i, _| i+1);
+    /// // We don't know how tall it is, so let's try to convert its `M` dimension.
+    /// match mat.try_m::<2>() {
+    ///     Ok(mat) => panic!("this shouldn't have worked, pardner..."),
+    ///     // It didn't work, so lets try again.
+    ///     Err(mat) => match mat.try_m::<4>() {
+    ///         Ok(_) => println!("howdy"),
+    ///         Err(_) => panic!("i have no earthly idea what this is"),
+    ///     }
+    /// }
+    /// ```
+    pub fn try_m<const M2: usize>(self) -> Result<Matrix<T, Fixed<M2>, N>, Self> {
+        if self.m.dim() == M2 {
             Ok(Matrix {
-                m: M2::new(),
+                m: Fixed,
                 n: self.n,
                 items: self.items,
             })
         } else {
-            Err(CoerceError::M(self.m.dim(), M2::DIM))
+            Err(self)
         }
     }
 
-    pub fn coerce_n<N2: FixedDim>(self) -> Result<Matrix<T, M, N2>, CoerceError> {
-        if self.n.dim() == N2::DIM {
+    /// Tries to convert `N` to a known fixed dimension.
+    pub fn try_n<const N2: usize>(self) -> Result<Matrix<T, M, Fixed<N2>>, Self> {
+        if self.n.dim() == N2 {
             Ok(Matrix {
                 m: self.m,
-                n: N2::new(),
+                n: Fixed,
                 items: self.items,
             })
         } else {
-            Err(CoerceError::N(self.n.dim(), N2::DIM))
+            Err(self)
         }
     }
 
