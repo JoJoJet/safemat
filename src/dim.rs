@@ -144,29 +144,30 @@ macro_rules! dim {
     };
 
     ($var: ident) => {{
-        mod $var {
+        mod var_dim {
+            #[allow(non_camel_case_types)]
             #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-            pub(super) struct VarDim(pub(super) usize);
-            impl $crate::Dim for VarDim {
+            pub(super) struct $var(pub(super) usize);
+            impl $crate::Dim for $var {
                 #[inline]
                 fn dim(&self) -> usize {
                     self.0
                 }
             }
-            impl $crate::Patch for VarDim {
+            impl $crate::Patch for $var {
                 type Target = Self;
                 #[inline]
                 fn patch(self) -> Self {
                     self
                 }
             }
-            impl<const N: usize> From<$crate::Fixed<N>> for VarDim {
+            impl<const N: usize> From<$crate::Fixed<N>> for $var {
                 #[inline]
                 fn from(_: $crate::Fixed<N>) -> Self {
                     Self({ N })
                 }
             }
         }
-        $var::VarDim($var)
+        var_dim::$var($var)
     }};
 }
