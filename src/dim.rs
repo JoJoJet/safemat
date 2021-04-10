@@ -56,44 +56,61 @@ pub trait Patch: Dim {
 }
 
 macro_rules! impl_plus_into {
-    ($sum: literal; $sub: literal) => {
+    ($sum: literal;; $sub: expr) => {
         impl Patch for Plus::<Fixed::<{$sum - $sub}>, Fixed::<{$sub}>> {
             type Target = Fixed::<{$sum}>;
             fn patch(self) -> Self::Target {
-                Fixed::<{$sum}>
+                Fixed
             }
         }
-        impl From<Plus::<Fixed::<{$sum - $sub}>, Fixed::<$sub>>> for Fixed::<$sum> {
-            fn from(_: Plus::<Fixed::<{$sum - $sub}>, Fixed::<$sub>>) -> Self {
+        impl From<Plus::<Fixed::<{$sum - $sub}>, Fixed::<{$sub}>>> for Fixed::<{$sum}> {
+            fn from(_: Plus::<Fixed::<{$sum - $sub}>, Fixed::<{$sub}>>) -> Self {
                 Self
             }
         }
-        impl From<Fixed::<$sum>> for Plus::<Fixed::<{$sum - $sub}>, Fixed::<$sub>> {
+        impl From<Fixed::<$sum>> for Plus::<Fixed::<{$sum - $sub}>, Fixed::<{$sub}>> {
             fn from(_: Fixed::<$sum>) -> Self {
                 Self(Fixed, Fixed)
             }
         }
     };
+    ($sum: literal; $($sub: literal),* ;) => {
+        $(impl_plus_into!($sum;; $sub);)*
+        $(impl_plus_into!($sum;; { $sum - $sub });)*
+        impl_plus_into!($sum;; {$sum / 2});
+    };
     ($sum: literal; $($sub: literal),*) => {
-        $(impl_plus_into!($sum; $sub);)*
+        $(impl_plus_into!($sum;; $sub);)*
+        $(impl_plus_into!($sum;; { $sum - $sub});)*
     };
 }
 
-impl_plus_into!(2; 1);
-impl_plus_into!(3; 1, 2);
-impl_plus_into!(4; 1, 2, 3);
-impl_plus_into!(5; 1, 2, 3, 4);
-impl_plus_into!(6; 1, 2, 3, 4, 5);
-impl_plus_into!(7; 1, 2, 3, 4, 5, 6);
-impl_plus_into!(8; 1, 2, 3, 4, 5, 6, 7);
-impl_plus_into!(9; 1, 2, 3, 4, 5, 6, 7, 8);
-impl_plus_into!(10; 1, 2, 3, 4, 5, 6, 7, 8, 9);
-impl_plus_into!(11; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
-impl_plus_into!(12; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
-impl_plus_into!(13; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
-impl_plus_into!(14; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
-impl_plus_into!(15; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
-impl_plus_into!(16; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+impl_plus_into!(2; 0 ;);
+impl_plus_into!(3; 0, 1);
+impl_plus_into!(4; 0, 1 ;);
+impl_plus_into!(5; 0, 1, 2);
+impl_plus_into!(6; 0, 1, 2 ;);
+impl_plus_into!(7; 0, 1, 2, 3);
+impl_plus_into!(8; 0, 1, 2, 3 ;);
+impl_plus_into!(9; 0, 1, 2, 3, 4);
+impl_plus_into!(10; 0, 1, 2, 3, 4 ;);
+impl_plus_into!(11; 0, 1, 2, 3, 4, 5);
+impl_plus_into!(12; 0, 1, 2, 3, 4, 5 ;);
+impl_plus_into!(13; 0, 1, 2, 3, 4, 5, 6);
+impl_plus_into!(14; 0, 1, 2, 3, 4, 5, 6 ;);
+impl_plus_into!(15; 0, 1, 2, 3, 4, 5, 6, 7);
+impl_plus_into!(16; 0, 1, 2, 3, 4, 5, 6, 7 ;);
+impl_plus_into!(32; 0, 8 ;);
+impl_plus_into!(64; 0, 16 ;);
+impl_plus_into!(128; 0, 32 ;);
+impl_plus_into!(256; 0, 64 ;);
+impl_plus_into!(512; 0, 128 ;);
+impl_plus_into!(1024; 0, 256 ;);
+impl_plus_into!(2048; 0, 512 ;);
+impl_plus_into!(4096; 0, 1024 ;);
+impl_plus_into!(8192; 0, 2048 ;);
+impl_plus_into!(16_384; 0, 4096 ;);
+impl_plus_into!(32_768; 0, 8192 ;);
 
 /// Evaluates to an expression implementing [safemat::Dim], based on the input expression.
 /// If the input is a usize literal, this will evaluate to a monomorphiztation of [safemat::FixedMat].
