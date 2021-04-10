@@ -115,6 +115,28 @@ impl_plus_into!(32_768; 0, 8192 ;);
 /// Evaluates to an expression implementing [safemat::Dim], based on the input expression.
 /// If the input is a usize literal, this will evaluate to a monomorphiztation of [safemat::FixedMat].
 /// If the input is a variable, this will evaluate to a new, unique type, bound to that variable.
+///
+/// This allows you to have matrices whose dimensions are not known at compile time without abandoning type-safety.
+/// ```
+/// # use safemat::*;
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// #   do_patch(Some("4".to_owned()).into_iter())
+/// # }
+/// # fn do_patch(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::error::Error>> {
+/// // Grab an unkown number from the command line.
+/// let len = args.next()
+///     .ok_or("no args")?
+///     .parse::<usize>()?;
+/// // Build a matrix, using the number as a dimension.
+/// let a = Matrix::from_fn_with_dim(dim!(len), dim!(2), |i, j| i + j);
+/// # assert_eq!(a, mat![ 0, 1 ; 1, 2 ; 2, 3 ; 3, 4 ]);
+/// let b = mat![ 1, 2, 3 ; 4, 5, 6 ];
+/// let c = &a * &b; // Since a.n == b.m, we can multiply them.
+///                  // `c` has dimensions `len` x 3.
+/// # assert_eq!(c, mat![ 4, 5, 6 ; 9, 12, 15 ; 14, 19, 24 ; 19, 26, 33 ]);
+/// # Ok(())
+/// # }
+/// ```
 #[macro_export]
 macro_rules! dim {
     ($val: literal) => {
@@ -126,10 +148,25 @@ macro_rules! dim {
             #[derive(Clone, Copy, Debug, PartialEq, Eq)]
             pub(super) struct VarDim(pub(super) usize);
             impl $crate::Dim for VarDim {
+                #[inline]
                 fn dim(&self) -> usize {
                     self.0
                 }
             }
+            impl $crate::Patch for VarDim {
+                type Target = Self;
+                #[inline]
+                fn patch(self) -> Self {
+                    self
+                }
+            }
+            impl<const N: usize> From<$crate::Fixed<N>> for VarDim {
+                #[inline]
+                fn from(_: $crate::Fixed<N>) -> Self {
+                    Self({ N })
+                }
+            }
         }
+        $var::VarDim($var)
     }};
 }
