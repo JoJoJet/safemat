@@ -210,6 +210,51 @@ impl<T, M: Dim, N: Dim> DoubleEndedIterator for IterMut<'_, T, M, N> {
 
 impl<T, M: Dim, N: Dim> ExactSizeIterator for IterMut<'_, T, M, N> {}
 
+/// An iterator that splits a matrix into a set of owned rows.
+/// ```
+/// # use safemat::*;
+/// let mat = mat![ 1, 2, 3, 4 ; 5, 6, 7, 8 ];
+/// let mut rows = mat.into_rows();
+/// assert_eq!(rows.next(), Some(mat![1, 2, 3, 4]));
+/// assert_eq!(rows.next(), Some(mat![5, 6, 7, 8]));
+/// assert_eq!(rows.next(), None);
+/// ```
+pub struct IntoRows<T, M, N> {
+    m: M,
+    n: N,
+    iter: std::vec::IntoIter<T>,
+    i: usize,
+}
+
+impl<T, M: Dim, N: Dim> Iterator for IntoRows<T, M, N> {
+    type Item = RowVec<T, N>;
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i < self.m.dim() {
+            self.i += 1;
+            Some(RowVec::from_fn_with_dim(dim!(1), self.n, |_, _| {
+                self.iter.next().unwrap()
+            }))
+        } else {
+            None
+        }
+    }
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+}
+
+impl<T, M: Dim, N: Dim> ExactSizeIterator for IntoRows<T, M, N> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.m.dim() - self.i
+    }
+}
+
+impl<T, M: Dim, N: Dim> FusedIterator for IntoRows<T, M, N> {}
+
 /// An iterator over the rows of a matrix.
 /// ```
 /// # use safemat::*;
@@ -255,6 +300,52 @@ impl<T, M: Dim, N: Dim> ExactSizeIterator for Rows<'_, T, M, N> {
 }
 
 impl<T, M: Dim, N: Dim> FusedIterator for Rows<'_, T, M, N> {}
+
+/// An iterator that splits a matrix into a set of owned columns.
+/// ```
+/// # use safemat::*;
+/// let mat = mat![ 1, 2, 3, 4 ; 5, 6, 7, 8 ];
+/// let mut cols = mat.into_columns();
+/// assert_eq!(cols.next(), Some(mat![1 ; 5]));
+/// assert_eq!(cols.next(), Some(mat![2 ; 6]));
+/// assert_eq!(cols.next(), Some(mat![3 ; 7]));
+/// assert_eq!(cols.next(), Some(mat![4 ; 8]));
+/// assert_eq!(cols.next(), None);
+/// ```
+pub struct IntoColumns<T, M, N> {
+    mat: Matrix<Option<T>, M, N>,
+    j: usize,
+}
+
+impl<T, M: Dim, N: Dim> Iterator for IntoColumns<T, M, N> {
+    type Item = Vector<T, M>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let j = self.j;
+        let n = self.mat.n.dim();
+        if j < n {
+            self.j += 1;
+            Some(Vector::from_fn_with_dim(self.mat.m, dim!(1), |i, _| {
+                self.mat.items[i * n + j].take().unwrap()
+            }))
+        } else {
+            None
+        }
+    }
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+}
+
+impl<T, M: Dim, N: Dim> ExactSizeIterator for IntoColumns<T, M, N> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.mat.n.dim() - self.j
+    }
+}
+
+impl<T, M: Dim, N: Dim> FusedIterator for IntoColumns<T, M, N> {}
 
 /// An iterator over the columns of a matrix.
 /// ```
@@ -356,7 +447,25 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     }
 
     #[inline]
+    pub fn into_rows(self) -> IntoRows<T, M, N> {
+        IntoRows {
+            m: self.m,
+            n: self.n,
+            iter: Vec::from(self.items).into_iter(),
+            i: 0,
+        }
+    }
+
+    #[inline]
     pub fn columns(&self) -> Columns<'_, T, M, N> {
         Columns { mat: self, j: 0 }
+    }
+
+    #[inline]
+    pub fn into_columns(self) -> IntoColumns<T, M, N> {
+        IntoColumns {
+            mat: self.map(|_, _, itm| Some(itm)),
+            j: 0,
+        }
     }
 }
