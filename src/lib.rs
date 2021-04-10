@@ -6,7 +6,7 @@ use std::{
 pub use num_traits::{One, Zero};
 
 mod dim;
-pub use dim::{Dim, Fixed, FixedDim, Plus};
+pub use dim::{Dim, Fixed, FixedDim, Patch, Plus};
 
 pub mod view;
 
@@ -111,43 +111,71 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
         }
     }
 
-    /// Performs an infallible conversion on the M dimension of this matrix.
+    /// Patches the composite dimension/s into respective singular dimensions.
+    /// If either dimension does not implement [`Patch`], see [`patch_m`] or [`patch_n`].
+    /// ```
+    /// # use safemat::*;
+    /// let m = mat![1];
+    /// let m = m.vcat(mat![2]);
+    /// let m = m.hcat(mat![ 3 , 4 ; 5, 6 ]);
+    /// // The matrix currently has dimensions `Plus<1, 1>` x `Plus<1, 2>`,
+    /// // but we'd rather it just be 2 x 3.
+    /// // `patch` can help.
+    /// let m: FixedMat<_, 2, 3> = m.patch(); // Type annotations not necessary.
+    /// ```
+    #[inline]
+    pub fn patch(self) -> Matrix<T, M::Target, N::Target>
+    where
+        M: Patch,
+        N: Patch,
+    {
+        let m = self.m.patch();
+        let n = self.n.patch();
+        debug_assert_eq!(self.m.dim(), m.dim());
+        debug_assert_eq!(self.n.dim(), n.dim());
+        Matrix {
+            m,
+            n,
+            items: self.items,
+        }
+    }
+
+    /// Patches the composite dimension `M` into a single dimension.
     /// ```
     /// # use safemat::*;
     /// let a = mat![1];
     /// let b = mat![3];
     /// let c = a.vcat(b);
     /// // `c` is currently a column vector with length Plus<1, 1>,
-    /// // but we want the length to just be 2. `patch_m` can help.
-    /// let c: FixedVec<_, 2> = c.patch_m();
-    /// ```
-    /// Note that this will fail if the dimensions don't have an infallible conversion:
-    /// ```compile_fail
-    /// let a = mat![1];
-    /// let b = mat![3];
-    /// let c = a.vcat(b);
-    /// let c: FixedVec<_, 3> = c.patch_m(); // this fails
+    /// // but we want the length to just be 2.
+    /// // `patch_m` can help.
+    /// let c: FixedVec<_, 2> = c.patch_m(); // Type annotations not necessary.
     /// ```
     #[inline]
-    pub fn patch_m<M2: Dim>(self) -> Matrix<T, M2, N>
+    pub fn patch_m(self) -> Matrix<T, M::Target, N>
     where
-        M: Into<M2>,
+        M: Patch,
     {
+        let m = self.m.patch();
+        debug_assert_eq!(self.m.dim(), m.dim());
         Matrix {
-            m: self.m.into(),
+            m,
             n: self.n,
             items: self.items,
         }
     }
 
+    /// Patches the composite dimension `n` into a single dimesnion.
     #[inline]
-    pub fn patch_n<N2: Dim>(self) -> Matrix<T, M, N2>
+    pub fn patch_n(self) -> Matrix<T, M, N::Target>
     where
-        N: Into<N2>,
+        N: Patch,
     {
+        let n = self.n.patch();
+        debug_assert_eq!(self.n.dim(), n.dim());
         Matrix {
             m: self.m,
-            n: self.n.into(),
+            n,
             items: self.items,
         }
     }
@@ -205,7 +233,12 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// let c = a.vcat(b);
     /// assert_eq!(c, mat![ 1, 2 ; 3, 4 ; 5, 6 ]);
     /// ```
-    pub fn vcat<M2: Dim>(self, other: Matrix<T, M2, N>) -> Matrix<T, Plus<M, M2>, N> {
+    pub fn vcat<M2, N2>(self, other: Matrix<T, M2, N2>) -> Matrix<T, Plus<M, M2>, N>
+    where
+        M2: Dim,
+        N2: Dim + Into<N>,
+    {
+        assert_eq!(self.n.dim(), other.n.dim());
         let mut items = Vec::from(self.items);
         items.extend(Vec::from(other.items).into_iter());
         let m = Plus(self.m, other.m);
@@ -226,7 +259,12 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// let c = a.hcat(b);
     /// assert_eq!(c, mat![ 1, 4 ; 2, 5 ; 3, 6 ]);
     /// ```
-    pub fn hcat<N2: Dim>(self, other: Matrix<T, M, N2>) -> Matrix<T, M, Plus<N, N2>> {
+    pub fn hcat<M2, N2>(self, other: Matrix<T, M2, N2>) -> Matrix<T, M, Plus<N, N2>>
+    where
+        M2: Dim + Into<M>,
+        N2: Dim,
+    {
+        assert_eq!(self.m.dim(), other.m.dim());
         let len = self.m.dim() * (self.n.dim() + other.n.dim());
         let mut items = Vec::with_capacity(len);
         let mut a = Vec::from(self.items).into_iter();

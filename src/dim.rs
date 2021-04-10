@@ -1,7 +1,9 @@
+/// A value representing the length of a dimension of a matrix.
 pub trait Dim: Copy {
     fn dim(&self) -> usize;
 }
 
+/// A matrix dimension whose length is known at compile-time.
 pub trait FixedDim: Dim {
     const DIM: usize;
     fn new() -> Self;
@@ -25,6 +27,10 @@ impl<const N: usize> FixedDim for Fixed<N> {
     }
 }
 
+/// The sum of two dimensions.
+/// You will usually see this type as the result of matrix concatenation.
+/// If both operands are constants, you can combine them with the
+/// [`Patch`] trait's `patch` method.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Plus<A: Dim, B: Dim>(pub A, pub B);
 
@@ -43,8 +49,20 @@ impl<A: FixedDim, B: FixedDim> FixedDim for Plus<A, B> {
     }
 }
 
+/// A composite dimension (e.g. [`Plus`]) that can be reduced to a single dimension.
+pub trait Patch: Dim {
+    type Target: Dim;
+    fn patch(self) -> Self::Target;
+}
+
 macro_rules! impl_plus_into {
     ($sum: literal; $sub: literal) => {
+        impl Patch for Plus::<Fixed::<{$sum - $sub}>, Fixed::<{$sub}>> {
+            type Target = Fixed::<{$sum}>;
+            fn patch(self) -> Self::Target {
+                Fixed::<{$sum}>
+            }
+        }
         impl From<Plus::<Fixed::<{$sum - $sub}>, Fixed::<$sub>>> for Fixed::<$sum> {
             fn from(_: Plus::<Fixed::<{$sum - $sub}>, Fixed::<$sub>>) -> Self {
                 Self
