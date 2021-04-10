@@ -395,6 +395,9 @@ pub type Vector<T, M> = Matrix<T, M, dim!(1)>;
 /// Type alias for a column vector with fixed length.
 pub type FixedVec<T, const M: usize> = Vector<T, Fixed<M>>;
 
+pub type RowVec<T, N> = Matrix<T, dim!(1), N>;
+pub type FixedRowVec<T, const N: usize> = RowVec<T, Fixed<N>>;
+
 /// Provides something similar to a macro literal syntax.
 /// Rows are delineated with a semicolon ;
 ///
