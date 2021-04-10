@@ -3,12 +3,6 @@ pub trait Dim: Copy {
     fn dim(&self) -> usize;
 }
 
-/// A matrix dimension whose length is known at compile-time.
-pub trait FixedDim: Dim {
-    const DIM: usize;
-    fn new() -> Self;
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Fixed<const N: usize>;
 
@@ -19,11 +13,11 @@ impl<const N: usize> Dim for Fixed<N> {
     }
 }
 
-impl<const N: usize> FixedDim for Fixed<N> {
-    const DIM: usize = N;
+impl<const N: usize> Patch for Fixed<N> {
+    type Target = Self;
     #[inline]
-    fn new() -> Self {
-        Self
+    fn patch(self) -> Self {
+        self
     }
 }
 
@@ -38,14 +32,6 @@ impl<A: Dim, B: Dim> Dim for Plus<A, B> {
     #[inline]
     fn dim(&self) -> usize {
         self.0.dim() + self.1.dim()
-    }
-}
-
-impl<A: FixedDim, B: FixedDim> FixedDim for Plus<A, B> {
-    const DIM: usize = A::DIM + B::DIM;
-    #[inline]
-    fn new() -> Self {
-        Self(A::new(), B::new())
     }
 }
 
@@ -117,6 +103,10 @@ impl_plus_into!(32_768; 0, 8192 ;);
 /// If the input is a variable, this will evaluate to a new, unique type, bound to that variable.
 ///
 /// This allows you to have matrices whose dimensions are not known at compile time without abandoning type-safety.
+/// In order to perform operations such as multiplication or concatenation, the matrix dimensions must agree, so
+/// usually they must be known at compile time.
+/// However, if the dimensions of two matrices both depend on the *same* variable, we know that they must agree,
+/// even if their specific values are not known at compile time.
 /// ```
 /// # use safemat::*;
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {

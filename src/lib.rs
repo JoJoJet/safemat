@@ -6,7 +6,7 @@ use std::{
 pub use num_traits::{One, Zero};
 
 mod dim;
-pub use dim::{Dim, Fixed, FixedDim, Patch, Plus};
+pub use dim::{Dim, Fixed, Patch, Plus};
 
 pub mod view;
 
