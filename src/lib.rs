@@ -277,6 +277,20 @@ pub enum CoerceError {
     N(usize, usize),
 }
 
+impl<T, M: Dim, N: Dim> Index<usize> for Matrix<T, M, N> {
+    type Output = T;
+    #[inline]
+    fn index(&self, i: usize) -> &T {
+        &self.items[i]
+    }
+}
+impl<T, M: Dim, N: Dim> IndexMut<usize> for Matrix<T, M, N> {
+    #[inline]
+    fn index_mut(&mut self, i: usize) -> &mut T {
+        &mut self.items[i]
+    }
+}
+
 impl<T, M: Dim, N: Dim> Index<[usize; 2]> for Matrix<T, M, N> {
     type Output = T;
     fn index(&self, [i, j]: [usize; 2]) -> &T {
