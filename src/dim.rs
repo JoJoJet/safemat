@@ -1,7 +1,7 @@
 use std::ops::Add;
 
 /// A value representing the length of a dimension of a matrix.
-pub trait Dim: Copy {
+pub trait Dim: Copy + 'static {
     fn dim(&self) -> usize;
 }
 

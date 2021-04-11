@@ -2,13 +2,7 @@ use std::ops::Index;
 
 use crate::{Dim, Matrix};
 
-/// A view into a matrix; a reference to a matrix.
-///
-/// # Type parameters:
-/// `Ms`, `Ns`, the dimensions of this view.
-///
-/// `Mo`, `No`, the dimensions of the original matrix.
-///
+/// A view into (2D slice of) a matrix. Or, a reference to a matrix.
 /// # Examples
 /// Views support linear indexing.
 /// ```
@@ -42,12 +36,41 @@ use crate::{Dim, Matrix};
 /// assert_eq!(v[[1, 1]], 13);
 /// assert_eq!(v[[1, 2]], 14);
 /// ```
+pub trait View<'a, T, M: Dim, N: Dim>
+where
+    Self: Index<usize, Output = T> + Index<[usize; 2], Output = T>,
+{
+    fn m(&self) -> M;
+    fn n(&self) -> N;
+}
+
+/// A view into a matrix; a reference to a matrix.
+///
+/// # Type parameters:
+/// `Ms`, `Ns`, the dimensions of this view.
+///
+/// `Mo`, `No`, the dimensions of the original matrix.
+///
+/// For examples, see [`View`].
 pub struct MatrixView<'mat, T, Ms, Ns, Mo, No> {
     mat: &'mat Matrix<T, Mo, No>,
     m: Ms,
     n: Ns,
     i: usize,
     j: usize,
+}
+
+impl<'a, T: 'a, Ms: Dim, Ns: Dim, Mo: Dim, No: Dim> View<'a, T, Ms, Ns>
+    for MatrixView<'_, T, Ms, Ns, Mo, No>
+{
+    #[inline]
+    fn m(&self) -> Ms {
+        self.m
+    }
+    #[inline]
+    fn n(&self) -> Ns {
+        self.n
+    }
 }
 
 impl<T, Ms: Dim, Ns: Dim, Mo: Dim, No: Dim> Index<usize> for MatrixView<'_, T, Ms, Ns, Mo, No> {
@@ -76,6 +99,39 @@ impl<T, Ms: Dim, Ns: Dim, Mo: Dim, No: Dim> Index<[usize; 2]>
         debug_assert!(i < self.mat.m.dim());
         debug_assert!(j < self.mat.n.dim());
         &self.mat.items[i * self.mat.n.dim() + j]
+    }
+}
+
+/// A type from which you can obtain a [`View`] of a specific size.
+/// This is implemented by [`Matrix`] as well as every `View` type.
+pub trait IntoView<'a, T, M: Dim, N: Dim>: Sized + 'a {
+    type View: View<'a, T, M, N> + 'a;
+    /// Gets a [`View`] from this instance.
+    /// If the implementing type is a matrix, this should return
+    /// a new [`MatrixView`] encompassing the entire matrix.
+    ///
+    /// If the implementing type is already a `View`,
+    /// it should simply return itself.
+    fn into_view(self) -> Self::View;
+}
+
+impl<'a, T, M, N, Mo, No> IntoView<'a, T, M, N> for MatrixView<'a, T, M, N, Mo, No>
+where
+    M: Dim,
+    N: Dim,
+    Mo: Dim,
+    No: Dim,
+{
+    type View = Self;
+    fn into_view(self) -> Self {
+        self
+    }
+}
+
+impl<'a, T, M: Dim, N: Dim> IntoView<'a, T, M, N> for &'a Matrix<T, M, N> {
+    type View = MatrixView<'a, T, M, N, M, N>;
+    fn into_view(self) -> Self::View {
+        self.view(0, 0, self.m, self.n)
     }
 }
 
