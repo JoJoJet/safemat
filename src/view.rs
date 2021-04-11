@@ -3,12 +3,21 @@ use super::*;
 /// A view into a row of a matrix.
 /// ```
 /// # use safemat::*;
-/// let mat = mat![ 1, 2, 3 ; 4, 5, 6 ];
-/// let row = mat.row_at(1);
-/// assert_eq!(row, [4, 5, 6].as_ref());
+/// let mat1 = mat![ 1, 2, 3 ; 4, 5, 6 ];
+/// // RowViews can be compared with slices.
+/// assert_eq!(mat1.row_at(1), [4, 5, 6].as_ref());
+///
+/// // They can also be compared with other RowViews.
+/// let mat2 = mat![ 0, 1, 0 ; 1, 2, 3 ; 2, 3, 4 ];
+/// assert_eq!(mat1.row_at(0), mat2.row_at(1));
+/// assert_ne!(mat1.row_at(1), mat2.row_at(1));
+///
+/// // Or even with ColumnViews.
+/// assert_eq!(mat1.row_at(0), mat2.column_at(1));
+/// assert_ne!(mat1.row_at(1), mat2.column_at(0));
 ///
 /// // RowViews are also iterators.
-/// let mut row = mat.row_at(0);
+/// let mut row = mat1.row_at(0);
 /// assert_eq!(row.next(), Some(&1));
 /// assert_eq!(row.next(), Some(&2));
 /// assert_eq!(row.next(), Some(&3));
@@ -24,15 +33,37 @@ pub struct RowView<'a, T, M, N> {
 impl<T, M1, M2, N1, N2> PartialEq<RowView<'_, T, M2, N2>> for RowView<'_, T, M1, N1>
 where
     T: PartialEq,
-    N1: Dim,
-    N2: Dim + Into<N1>,
+    M1: Dim,
+    M2: Dim,
+    N1: Dim + PartialEq<N2>,
+    N2: Dim,
 {
     fn eq(&self, rhs: &RowView<'_, T, M2, N2>) -> bool {
         let n = self.mat.n.dim();
-        assert_eq!(n, rhs.mat.n.dim());
+        if n != rhs.mat.n.dim() {
+            return false;
+        }
         let a = self.i * n;
         let b = rhs.i * n;
         &self.mat.items[a..a + n] == &rhs.mat.items[b..b + n]
+    }
+}
+
+impl<T, M1, M2, N1, N2> PartialEq<ColumnView<'_, T, M2, N2>> for RowView<'_, T, M1, N1>
+where
+    T: PartialEq,
+    M1: Dim,
+    M2: Dim,
+    N1: Dim + PartialEq<M2>,
+    N2: Dim,
+{
+    fn eq(&self, rhs: &ColumnView<'_, T, M2, N2>) -> bool {
+        let n = self.mat.n.dim();
+        if n != rhs.mat.m.dim() {
+            return false;
+        }
+        let i = self.i * n;
+        rhs.eq(&&self.mat.items[i..i + n])
     }
 }
 
@@ -88,9 +119,12 @@ impl<T, M, N: Dim> ExactSizeIterator for RowView<'_, T, M, N> {
 /// assert_ne!(mat.column_at(0), [1, 3, 5, 7].as_ref());
 ///
 /// // They can also be compared with other `ColumnView`s.
-/// let mat2 = mat![ 0, 1 ; 0, 3 ; 0, 5 ];
+/// let mat2 = mat![ 0, 1, 0 ; 1, 3, 5 ; 0, 5, 0 ];
 /// assert_eq!(mat.column_at(0), mat2.column_at(1));
 /// assert_ne!(mat.column_at(1), mat2.column_at(0));
+///
+/// // Or even with `RowView`s.
+/// assert_eq!(mat.column_at(0), mat2.row_at(1));
 ///
 /// // ColumnViews are also iterators
 /// let mut col = mat.column_at(0);
@@ -109,14 +143,16 @@ pub struct ColumnView<'a, T, M, N> {
 impl<T, M1, M2, N1, N2> PartialEq<ColumnView<'_, T, M2, N2>> for ColumnView<'_, T, M1, N1>
 where
     T: PartialEq,
-    M1: Dim,
-    M2: Dim + Into<M1>,
+    M1: Dim + PartialEq<M2>,
+    M2: Dim,
     N1: Dim,
     N2: Dim,
 {
     fn eq(&self, rhs: &ColumnView<'_, T, M2, N2>) -> bool {
         let m = self.mat.m.dim();
-        assert_eq!(m, rhs.mat.m.dim());
+        if m != rhs.mat.m.dim() {
+            return false;
+        }
         let n1 = self.mat.n.dim();
         let n2 = rhs.mat.n.dim();
         for i in 0..m {
@@ -125,6 +161,21 @@ where
             }
         }
         return true;
+    }
+}
+
+impl<T, M1, M2, N1, N2> PartialEq<RowView<'_, T, M2, N2>> for ColumnView<'_, T, M1, N1>
+where
+    T: PartialEq,
+    M1: Dim + PartialEq<N2>,
+    M2: Dim,
+    N1: Dim,
+    N2: Dim,
+{
+    fn eq(&self, rhs: &RowView<'_, T, M2, N2>) -> bool {
+        let n = rhs.mat.n.dim();
+        let b = rhs.i * n;
+        self.eq(&&rhs.mat.items[b..b + n])
     }
 }
 
