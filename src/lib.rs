@@ -124,7 +124,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     ///     }
     /// }
     /// ```
-    pub fn try_m<const M2: usize>(self) -> Result<Matrix<T, Fixed<M2>, N>, Self> {
+    pub fn fix_m<const M2: usize>(self) -> Result<Matrix<T, Fixed<M2>, N>, Self> {
         if self.m.dim() == M2 {
             Ok(Matrix {
                 m: Fixed,
@@ -137,7 +137,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     }
 
     /// Tries to convert `N` to a known fixed dimension.
-    pub fn try_n<const N2: usize>(self) -> Result<Matrix<T, M, Fixed<N2>>, Self> {
+    pub fn fix_n<const N2: usize>(self) -> Result<Matrix<T, M, Fixed<N2>>, Self> {
         if self.n.dim() == N2 {
             Ok(Matrix {
                 m: self.m,
