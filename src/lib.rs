@@ -229,12 +229,10 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
         for<'a> &'a T: Mul<&'a U, Output = V>,
     {
         if self.n.dim() == rhs.m.dim() {
-            let rhs = Matrix::<U, N, N2> {
-                m: self.n,
-                n: rhs.n,
-                items: rhs.items,
-            };
-            Ok(&self * &rhs)
+            let k = self.n.dim();
+            Ok(Matrix::from_fn_with_dim(self.m, rhs.n, |i, j| {
+                (0..k).map(|k| &self[[i, k]] * &rhs[[k, j]]).sum()
+            }))
         } else {
             Err(MulError(self.n.dim(), rhs.m.dim()))
         }
@@ -389,11 +387,32 @@ impl<T, M: Dim, N: Dim> IndexMut<[usize; 2]> for Matrix<T, M, N> {
     }
 }
 
-impl<'a, T, U, V, M: Dim, K: Dim, K2: Dim + Into<K>, N: Dim> Mul<&'a Matrix<U, K2, N>>
-    for &'a Matrix<T, M, K>
+/// The `N` dimension of the lhs must agree with the `M` dimension of the rhs.
+/// ```compile_fail
+/// # use safemat::*;
+/// let k = 3;
+/// let a = Matrix::<i32, _, _>::id_with_dim(dim!(k));
+/// let b = mat![ 1, 2 ; 3, 4 ; 5, 6 ];
+/// let c = &a * &b; // This fails because dimension `k`
+///                  // is not known to agree with `3` at compile-time.
+/// ```
+///
+/// ```
+/// # use safemat::*;
+/// let k = 3;
+/// let k = dim!(k);
+/// let a = Matrix::<i32, _, _>::id_with_dim(k);
+/// let b = Matrix::from_fn_with_dim(k, dim!(2), |i, j| (i + j) as i32);
+/// let c = &a * &b;
+/// ```
+impl<'a, T, U, V, M, K1, K2, N> Mul<&'a Matrix<U, K2, N>> for &'a Matrix<T, M, K1>
 where
     V: Sum,
     for<'b> &'b T: Mul<&'b U, Output = V>,
+    M: Dim,
+    K1: Dim + Patch,
+    K2: Dim + Patch<Target = K1::Target>,
+    N: Dim,
 {
     type Output = Matrix<V, M, N>;
     #[inline]
