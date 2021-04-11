@@ -1,4 +1,113 @@
-use super::*;
+use std::ops::Index;
+
+use crate::{Dim, Matrix};
+
+/// A view into a matrix; a reference to a matrix.
+///
+/// # Type parameters:
+/// `Ms`, `Ns`, the dimensions of this view.
+///
+/// `Mo`, `No`, the dimensions of the original matrix.
+///
+/// # Examples
+/// Views support linear indexing.
+/// ```
+/// # use safemat::*;
+/// let m = Matrix::from_array([
+///     [1,  2,  3,  4 ],
+///     [5,  6,  7,  8 ],
+///     [9,  10, 11, 12],
+///     [13, 14, 15, 16]
+/// ]);
+/// let v = m.view(1, 1, dim!(2), dim!(2));
+/// assert_eq!(v[0], 6);
+/// assert_eq!(v[1], 7);
+/// assert_eq!(v[2], 10);
+/// assert_eq!(v[3], 11);
+/// ```
+///
+/// As well as square indexing.
+/// ```
+/// # use safemat::*;
+/// let m = Matrix::from_array([
+///     [1,  2,  3,  4,  5 ],
+///     [6,  7,  8,  9,  10],
+///     [11, 12, 13, 14, 15]
+/// ]);
+/// let v = m.view(1, 1, dim!(2), dim!(3));
+/// assert_eq!(v[[0, 0]], 7);
+/// assert_eq!(v[[0, 1]], 8);
+/// assert_eq!(v[[0, 2]], 9);
+/// assert_eq!(v[[1, 0]], 12);
+/// assert_eq!(v[[1, 1]], 13);
+/// assert_eq!(v[[1, 2]], 14);
+/// ```
+pub struct MatrixView<'mat, T, Ms, Ns, Mo, No> {
+    mat: &'mat Matrix<T, Mo, No>,
+    m: Ms,
+    n: Ns,
+    i: usize,
+    j: usize,
+}
+
+impl<T, Ms: Dim, Ns: Dim, Mo: Dim, No: Dim> Index<usize> for MatrixView<'_, T, Ms, Ns, Mo, No> {
+    type Output = T;
+    #[inline]
+    fn index(&self, idx: usize) -> &Self::Output {
+        assert!(idx < self.m.dim() * self.n.dim());
+        let i = self.i + idx / self.n.dim();
+        let j = self.j + idx % self.n.dim();
+        debug_assert!(i < self.mat.m.dim());
+        debug_assert!(j < self.mat.n.dim());
+        &self.mat.items[i * self.mat.n.dim() + j]
+    }
+}
+
+impl<T, Ms: Dim, Ns: Dim, Mo: Dim, No: Dim> Index<[usize; 2]>
+    for MatrixView<'_, T, Ms, Ns, Mo, No>
+{
+    type Output = T;
+    #[inline]
+    fn index(&self, [i, j]: [usize; 2]) -> &Self::Output {
+        assert!(i < self.m.dim());
+        assert!(j < self.n.dim());
+        let i = self.i + i;
+        let j = self.j + j;
+        debug_assert!(i < self.mat.m.dim());
+        debug_assert!(j < self.mat.n.dim());
+        &self.mat.items[i * self.mat.n.dim() + j]
+    }
+}
+
+impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
+    /// Gets a view into this matrix.
+    /// # Parameters
+    /// `i`: the vertical index at which to start the view.
+    ///
+    /// `j`: the horizontal index at which to start the view.
+    ///
+    /// `len_m`: the vertical length of the view.
+    ///
+    /// `len_n`: the horizontal length of the view.
+    #[inline]
+    pub fn view<Ms: Dim, Ns: Dim>(
+        &self,
+        i: usize,
+        j: usize,
+        len_m: Ms,
+        len_n: Ns,
+    ) -> MatrixView<'_, T, Ms, Ns, M, N> {
+        assert!(i + len_m.dim() <= self.m.dim());
+        assert!(j + len_n.dim() <= self.n.dim());
+        MatrixView {
+            mat: self,
+            m: len_m,
+            n: len_n,
+            i,
+            j,
+        }
+    }
+}
 
 /// A view into a row of a matrix.
 /// ```
