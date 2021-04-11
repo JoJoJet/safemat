@@ -5,6 +5,12 @@ pub trait Dim: Copy {
     fn dim(&self) -> usize;
 }
 
+/// A composite dimension (e.g. [`Plus`]) that can be reduced to a single dimension.
+pub trait Patch: Dim {
+    type Target: Dim;
+    fn patch(self) -> Self::Target;
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Fixed<const N: usize>;
 
@@ -31,17 +37,22 @@ impl<const A: usize, const B: usize> Add<Fixed<B>> for Fixed<A> {
     }
 }
 
-/// The sum of two dimensions.
-/// You will usually see this type as the result of matrix concatenation.
-/// If both operands are constants, you can combine them with the
-/// [`Patch`] trait's `patch` method.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// The sum of two dimensions, at least one of which should be variable.
+/// If they are both constant, use [`FixedPlus`] instead.
+#[derive(Clone, Copy, Debug, Eq)]
 pub struct Plus<A: Dim, B: Dim>(pub A, pub B);
 
 impl<A: Dim, B: Dim> Dim for Plus<A, B> {
     #[inline]
     fn dim(&self) -> usize {
         self.0.dim() + self.1.dim()
+    }
+}
+
+impl<A: Dim, B: Dim, C: Dim> PartialEq<C> for Plus<A, B> {
+    #[inline]
+    fn eq(&self, rhs: &C) -> bool {
+        self.dim() == rhs.dim()
     }
 }
 
@@ -61,12 +72,6 @@ impl<const A: usize, const B: usize> Dim for FixedPlus<A, B> {
     fn dim(&self) -> usize {
         A + B
     }
-}
-
-/// A composite dimension (e.g. [`Plus`]) that can be reduced to a single dimension.
-pub trait Patch: Dim {
-    type Target: Dim;
-    fn patch(self) -> Self::Target;
 }
 
 macro_rules! impl_plus_into {
@@ -167,7 +172,7 @@ macro_rules! dim {
     ($var: ident) => {{
         mod var_dim {
             #[allow(non_camel_case_types)]
-            #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+            #[derive(Clone, Copy, Debug, Eq)]
             pub(super) struct $var(pub(super) usize);
             impl $crate::Dim for $var {
                 #[inline]
@@ -175,14 +180,30 @@ macro_rules! dim {
                     self.0
                 }
             }
+            use $crate::Dim as _;
+            impl<B: $crate::Dim> std::cmp::PartialEq<B> for $var {
+                #[inline]
+                fn eq(&self, rhs: &B) -> bool {
+                    self.0 == rhs.dim()
+                }
+            }
+            impl<const N: usize> std::cmp::PartialEq<$var> for $crate::Fixed<N> {
+                #[inline]
+                fn eq(&self, v: &$var) -> bool {
+                    N == v.0
+                }
+            }
+
             impl<B: $crate::Dim> std::ops::Add<B> for $var {
                 type Output = $crate::Plus<Self, B>;
+                #[inline]
                 fn add(self, rhs: B) -> Self::Output {
                     $crate::Plus(self, rhs)
                 }
             }
             impl<const N: usize> std::ops::Add<$var> for $crate::Fixed<N> {
                 type Output = $crate::Plus<$crate::Fixed<N>, $var>;
+                #[inline]
                 fn add(self, rhs: $var) -> Self::Output {
                     $crate::Plus(self, rhs)
                 }

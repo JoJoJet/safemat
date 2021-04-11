@@ -22,10 +22,10 @@ pub struct Matrix<T, M, N> {
 impl<T, M1, M2, N1, N2> PartialEq<Matrix<T, M2, N2>> for Matrix<T, M1, N1>
 where
     T: PartialEq,
-    M1: Dim,
-    M2: Dim + Into<M1>,
-    N1: Dim,
-    N2: Dim + Into<N1>,
+    M1: Dim + PartialEq<M2>,
+    M2: Dim,
+    N1: Dim + PartialEq<N2>,
+    N2: Dim,
 {
     fn eq(&self, rhs: &Matrix<T, M2, N2>) -> bool {
         debug_assert_eq!(self.m.dim(), rhs.m.dim());
@@ -33,7 +33,7 @@ where
         self.items.eq(&rhs.items)
     }
 }
-impl<T: Eq, M: Dim, N: Dim> Eq for Matrix<T, M, N> {}
+impl<T: Eq, M: Dim + Eq, N: Dim + Eq> Eq for Matrix<T, M, N> {}
 
 impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     #[inline]
@@ -258,11 +258,11 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// let len = args.next() // Grab a number from the command line.
     ///     .ok_or("no args")?
     ///     .parse::<usize>()?;
-    /// 
+    ///
     /// let a = Matrix::from_fn_with_dim(dim!(len), dim!(2), |i, j| i+j);
     /// let b = mat![ 5, 9 ];
     /// let c: Matrix<_, Plus<_,dim!(1)>, _> = a.vcat(b); // length = `len` + 1
-    /// # assert_eq!(c.try_m(), Ok(mat![ 0, 1 ; 1, 2 ; 2, 3 ; 5, 9 ]));
+    /// # assert_eq!(c, mat![ 0, 1 ; 1, 2 ; 2, 3 ; 5, 9 ]);
     /// # Ok(())
     /// # }
     /// ```
