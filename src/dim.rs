@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 /// A value representing the length of a dimension of a matrix.
 pub trait Dim: Copy {
     fn dim(&self) -> usize;
@@ -21,6 +23,14 @@ impl<const N: usize> Patch for Fixed<N> {
     }
 }
 
+impl<const A: usize, const B: usize> Add<Fixed<B>> for Fixed<A> {
+    type Output = FixedPlus<A, B>;
+    #[inline]
+    fn add(self, _: Fixed<B>) -> Self::Output {
+        FixedPlus
+    }
+}
+
 /// The sum of two dimensions.
 /// You will usually see this type as the result of matrix concatenation.
 /// If both operands are constants, you can combine them with the
@@ -35,6 +45,24 @@ impl<A: Dim, B: Dim> Dim for Plus<A, B> {
     }
 }
 
+impl<A: Dim, B: Dim> Patch for Plus<A, B> {
+    type Target = Self;
+    #[inline]
+    fn patch(self) -> Self {
+        self
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FixedPlus<const A: usize, const B: usize>;
+
+impl<const A: usize, const B: usize> Dim for FixedPlus<A, B> {
+    #[inline]
+    fn dim(&self) -> usize {
+        A + B
+    }
+}
+
 /// A composite dimension (e.g. [`Plus`]) that can be reduced to a single dimension.
 pub trait Patch: Dim {
     type Target: Dim;
@@ -43,20 +71,23 @@ pub trait Patch: Dim {
 
 macro_rules! impl_plus_into {
     ($sum: literal;; $sub: expr) => {
-        impl Patch for Plus::<Fixed::<{$sum - $sub}>, Fixed::<{$sub}>> {
+        impl Patch for FixedPlus::<{$sum - $sub}, {$sub}> {
             type Target = Fixed::<{$sum}>;
+            #[inline]
             fn patch(self) -> Self::Target {
                 Fixed
             }
         }
-        impl From<Plus::<Fixed::<{$sum - $sub}>, Fixed::<{$sub}>>> for Fixed::<{$sum}> {
-            fn from(_: Plus::<Fixed::<{$sum - $sub}>, Fixed::<{$sub}>>) -> Self {
+        impl From<FixedPlus::<{$sum - $sub}, {$sub}>> for Fixed::<{$sum}> {
+            #[inline]
+            fn from(_: FixedPlus::<{$sum - $sub}, {$sub}>) -> Self {
                 Self
             }
         }
-        impl From<Fixed::<$sum>> for Plus::<Fixed::<{$sum - $sub}>, Fixed::<{$sub}>> {
+        impl From<Fixed::<$sum>> for FixedPlus::<{$sum - $sub}, {$sub}> {
+            #[inline]
             fn from(_: Fixed::<$sum>) -> Self {
-                Self(Fixed, Fixed)
+                Self
             }
         }
     };
@@ -142,6 +173,18 @@ macro_rules! dim {
                 #[inline]
                 fn dim(&self) -> usize {
                     self.0
+                }
+            }
+            impl<B: $crate::Dim> std::ops::Add<B> for $var {
+                type Output = $crate::Plus<Self, B>;
+                fn add(self, rhs: B) -> Self::Output {
+                    $crate::Plus(self, rhs)
+                }
+            }
+            impl<const N: usize> std::ops::Add<$var> for $crate::Fixed<N> {
+                type Output = $crate::Plus<$crate::Fixed<N>, $var>;
+                fn add(self, rhs: $var) -> Self::Output {
+                    $crate::Plus(self, rhs)
                 }
             }
             impl $crate::Patch for $var {

@@ -1,6 +1,6 @@
 use std::{
     iter::Sum,
-    ops::{Index, IndexMut, Mul},
+    ops::{Add, Index, IndexMut, Mul},
 };
 
 pub use num_traits::{One, Zero};
@@ -245,22 +245,45 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// # use safemat::*;
     /// let a = mat![ 1, 2 ; 3, 4 ];
     /// let b = mat![ 5, 6 ];
-    /// let c = a.vcat(b);
+    /// let c: FixedMat<_, 3, 2> = a.vcat(b); // Type annotations not necessary.
     /// assert_eq!(c, mat![ 1, 2 ; 3, 4 ; 5, 6 ]);
     /// ```
-    pub fn vcat<M2, N2>(self, other: Matrix<T, M2, N2>) -> Matrix<T, Plus<M, M2>, N>
+    /// It also works for variable-length matrices.
+    /// ```
+    /// # use safemat::*;
+    /// # fn main() {
+    /// # do_vcat(Some("3".to_owned()).into_iter()).unwrap();
+    /// # }
+    /// # fn do_vcat(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::error::Error>> {
+    /// let len = args.next() // Grab a number from the command line.
+    ///     .ok_or("no args")?
+    ///     .parse::<usize>()?;
+    /// 
+    /// let a = Matrix::from_fn_with_dim(dim!(len), dim!(2), |i, j| i+j);
+    /// let b = mat![ 5, 9 ];
+    /// let c: Matrix<_, Plus<_,dim!(1)>, _> = a.vcat(b); // length = `len` + 1
+    /// # assert_eq!(c.try_m(), Ok(mat![ 0, 1 ; 1, 2 ; 2, 3 ; 5, 9 ]));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn vcat<M2, N2>(
+        self,
+        other: Matrix<T, M2, N2>,
+    ) -> Matrix<T, <<M as Add<M2>>::Output as Patch>::Target, N>
     where
+        M: Add<M2>,
+        <M as Add<M2>>::Output: Patch,
         M2: Dim,
         N2: Dim + Into<N>,
     {
         assert_eq!(self.n.dim(), other.n.dim());
         let mut items = Vec::from(self.items);
         items.extend(Vec::from(other.items).into_iter());
-        let m = Plus(self.m, other.m);
+        let m = self.m + other.m;
         let n = self.n;
         assert_eq!(items.len(), m.dim() * n.dim());
         Matrix {
-            m: Plus(self.m, other.m),
+            m: m.patch(),
             n: self.n,
             items: items.into_boxed_slice(),
         }
@@ -271,16 +294,22 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// # use safemat::*;
     /// let a = mat![ 1 ; 2 ; 3 ];
     /// let b = mat![ 4 ; 5 ; 6 ];
-    /// let c = a.hcat(b);
+    /// let c: FixedMat<_, 3, 2> = a.hcat(b); // Type annotations not necessary.
     /// assert_eq!(c, mat![ 1, 4 ; 2, 5 ; 3, 6 ]);
     /// ```
-    pub fn hcat<M2, N2>(self, other: Matrix<T, M2, N2>) -> Matrix<T, M, Plus<N, N2>>
+    pub fn hcat<M2, N2>(
+        self,
+        other: Matrix<T, M2, N2>,
+    ) -> Matrix<T, M, <<N as Add<N2>>::Output as Patch>::Target>
     where
         M2: Dim + Into<M>,
+        N: Add<N2>,
+        <N as Add<N2>>::Output: Patch,
         N2: Dim,
     {
         assert_eq!(self.m.dim(), other.m.dim());
-        let len = self.m.dim() * (self.n.dim() + other.n.dim());
+        let n = self.n + other.n;
+        let len = self.m.dim() * n.dim();
         let mut items = Vec::with_capacity(len);
         let mut a = Vec::from(self.items).into_iter();
         let mut b = Vec::from(other.items).into_iter();
@@ -295,7 +324,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
         assert_eq!(items.len(), len);
         Matrix {
             m: self.m,
-            n: Plus(self.n, other.n),
+            n: n.patch(),
             items: items.into_boxed_slice(),
         }
     }
