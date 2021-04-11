@@ -5,8 +5,9 @@ use std::{
 
 pub use num_traits::{One, Zero};
 
-mod dim;
-pub use dim::{Dim, Fixed, Patch, Plus};
+pub mod dim;
+pub use dim::Dim;
+use dim::{Fixed, Identity};
 
 pub mod view;
 
@@ -111,75 +112,6 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
         }
     }
 
-    /// Patches the composite dimension/s into respective singular dimensions.
-    /// If either dimension does not implement [`Patch`], see [`patch_m`] or [`patch_n`].
-    /// ```
-    /// # use safemat::*;
-    /// let m = mat![1];
-    /// let m = m.vcat(mat![2]);
-    /// let m = m.hcat(mat![ 3 , 4 ; 5, 6 ]);
-    /// // The matrix currently has dimensions `Plus<1, 1>` x `Plus<1, 2>`,
-    /// // but we'd rather it just be 2 x 3.
-    /// // `patch` can help.
-    /// let m: FixedMat<_, 2, 3> = m.patch(); // Type annotations not necessary.
-    /// ```
-    #[inline]
-    pub fn patch(self) -> Matrix<T, M::Target, N::Target>
-    where
-        M: Patch,
-        N: Patch,
-    {
-        let m = self.m.patch();
-        let n = self.n.patch();
-        debug_assert_eq!(self.m.dim(), m.dim());
-        debug_assert_eq!(self.n.dim(), n.dim());
-        Matrix {
-            m,
-            n,
-            items: self.items,
-        }
-    }
-
-    /// Patches the composite dimension `M` into a single dimension.
-    /// ```
-    /// # use safemat::*;
-    /// let a = mat![1];
-    /// let b = mat![3];
-    /// let c = a.vcat(b);
-    /// // `c` is currently a column vector with length Plus<1, 1>,
-    /// // but we want the length to just be 2.
-    /// // `patch_m` can help.
-    /// let c: FixedVec<_, 2> = c.patch_m(); // Type annotations not necessary.
-    /// ```
-    #[inline]
-    pub fn patch_m(self) -> Matrix<T, M::Target, N>
-    where
-        M: Patch,
-    {
-        let m = self.m.patch();
-        debug_assert_eq!(self.m.dim(), m.dim());
-        Matrix {
-            m,
-            n: self.n,
-            items: self.items,
-        }
-    }
-
-    /// Patches the composite dimension `n` into a single dimesnion.
-    #[inline]
-    pub fn patch_n(self) -> Matrix<T, M, N::Target>
-    where
-        N: Patch,
-    {
-        let n = self.n.patch();
-        debug_assert_eq!(self.n.dim(), n.dim());
-        Matrix {
-            m: self.m,
-            n,
-            items: self.items,
-        }
-    }
-
     /// Tries to convert `M` to a known fixed dimension.
     /// ```
     /// # use safemat::*;
@@ -248,7 +180,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// ```
     /// It also works for variable-length matrices.
     /// ```
-    /// # use safemat::*;
+    /// # use safemat::{*, dim::*};
     /// # fn main() {
     /// # do_vcat(Some("3".to_owned()).into_iter()).unwrap();
     /// # }
@@ -264,15 +196,12 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn vcat<M2, N2>(
-        self,
-        other: Matrix<T, M2, N2>,
-    ) -> Matrix<T, <<M as Add<M2>>::Output as Patch>::Target, N>
+    pub fn vcat<M2, N2>(self, other: Matrix<T, M2, N2>) -> Matrix<T, <M as Add<M2>>::Output, N>
     where
         M: Add<M2>,
-        <M as Add<M2>>::Output: Patch,
+        <M as Add<M2>>::Output: Dim,
         M2: Dim,
-        N2: Dim + Into<N>,
+        N2: Identity<N>,
     {
         assert_eq!(self.n.dim(), other.n.dim());
         let mut items = Vec::from(self.items);
@@ -281,7 +210,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
         let n = self.n;
         assert_eq!(items.len(), m.dim() * n.dim());
         Matrix {
-            m: m.patch(),
+            m,
             n: self.n,
             items: items.into_boxed_slice(),
         }
@@ -295,14 +224,11 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// let c: FixedMat<_, 3, 2> = a.hcat(b); // Type annotations not necessary.
     /// assert_eq!(c, mat![ 1, 4 ; 2, 5 ; 3, 6 ]);
     /// ```
-    pub fn hcat<M2, N2>(
-        self,
-        other: Matrix<T, M2, N2>,
-    ) -> Matrix<T, M, <<N as Add<N2>>::Output as Patch>::Target>
+    pub fn hcat<M2, N2>(self, other: Matrix<T, M2, N2>) -> Matrix<T, M, <N as Add<N2>>::Output>
     where
-        M2: Dim + Into<M>,
+        M2: Identity<M>,
         N: Add<N2>,
-        <N as Add<N2>>::Output: Patch,
+        <N as Add<N2>>::Output: Dim,
         N2: Dim,
     {
         assert_eq!(self.m.dim(), other.m.dim());
@@ -322,7 +248,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
         assert_eq!(items.len(), len);
         Matrix {
             m: self.m,
-            n: n.patch(),
+            n,
             items: items.into_boxed_slice(),
         }
     }
@@ -410,8 +336,8 @@ where
     V: Sum,
     for<'b> &'b T: Mul<&'b U, Output = V>,
     M: Dim,
-    K1: Dim + Patch,
-    K2: Dim + Patch<Target = K1::Target>,
+    K1: Dim,
+    K2: Identity<K1>,
     N: Dim,
 {
     type Output = Matrix<V, M, N>;

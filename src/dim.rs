@@ -5,11 +5,25 @@ pub trait Dim: Copy {
     fn dim(&self) -> usize;
 }
 
-/// A composite dimension (e.g. [`Plus`]) that can be reduced to a single dimension.
-pub trait Patch: Dim {
-    type Target: Dim;
-    fn patch(self) -> Self::Target;
-}
+/// A marker trait which asserts that the implementing type is just
+/// a different way of expressing the dimension `B`.
+///
+/// For example: [`Plus<A, B>`] = [`Plus<B, A>`].
+/// ```
+/// # use safemat::*;
+/// let len = 2;         // some spoopy unknown number.
+/// let len = dim!(len); // store the dim in a variable since the type is unnameable.
+/// let a = Matrix::from_fn_with_dim(dim!(1), len, |_, j| j + 1);
+/// let a = a.hcat(mat![3]); // N: Plus<len, 1>
+///
+/// let b = Matrix::from_fn_with_dim(len, dim!(1), |i, _| i + 2);
+/// let b = mat![1].vcat(b); // M: Plus<1, len>.
+///
+/// let c = &a * &b; // We can multiply them, because the Identity trait
+///                  // tells the type system that Plus<len, 1> = Plus<1, len>.
+/// assert_eq!(c, mat![14]);
+/// ```
+pub trait Identity<B: Dim>: Dim {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Fixed<const N: usize>;
@@ -21,13 +35,7 @@ impl<const N: usize> Dim for Fixed<N> {
     }
 }
 
-impl<const N: usize> Patch for Fixed<N> {
-    type Target = Self;
-    #[inline]
-    fn patch(self) -> Self {
-        self
-    }
-}
+impl<const N: usize> Identity<Fixed<N>> for Fixed<N> {}
 
 /// The sum of two dimensions.
 #[derive(Clone, Copy, Debug, Eq)]
@@ -47,14 +55,7 @@ impl<A: Dim, B: Dim, C: Dim> PartialEq<C> for Plus<A, B> {
     }
 }
 
-impl<A: Dim, B: Dim> Patch for Plus<A, B> {
-    type Target = Self;
-    #[inline]
-    fn patch(self) -> Self {
-        self
-    }
-}
-
+impl<A: Dim, B: Dim> Identity<Plus<B, A>> for Plus<A, B> {}
 
 macro_rules! impl_add {
     ($sum: literal;; $sub: expr) => {
@@ -136,7 +137,7 @@ impl_add!(32_768; 0, 8192 ;);
 #[macro_export]
 macro_rules! dim {
     ($val: literal) => {
-        $crate::Fixed::<{ $val }>
+        $crate::dim::Fixed::<{ $val }>
     };
 
     ($var: ident) => {{
@@ -151,6 +152,8 @@ macro_rules! dim {
                 }
             }
 
+            impl $crate::dim::Identity<$var> for $var {}
+
             use $crate::Dim as _;
             impl<B: $crate::Dim> std::cmp::PartialEq<B> for $var {
                 #[inline]
@@ -158,7 +161,7 @@ macro_rules! dim {
                     self.0 == rhs.dim()
                 }
             }
-            impl<const N: usize> std::cmp::PartialEq<$var> for $crate::Fixed<N> {
+            impl<const N: usize> std::cmp::PartialEq<$var> for $crate::dim::Fixed<N> {
                 #[inline]
                 fn eq(&self, v: &$var) -> bool {
                     N == v.0
@@ -166,25 +169,17 @@ macro_rules! dim {
             }
 
             impl<B: $crate::Dim> std::ops::Add<B> for $var {
-                type Output = $crate::Plus<Self, B>;
+                type Output = $crate::dim::Plus<Self, B>;
                 #[inline]
                 fn add(self, rhs: B) -> Self::Output {
-                    $crate::Plus(self, rhs)
+                    $crate::dim::Plus(self, rhs)
                 }
             }
-            impl<const N: usize> std::ops::Add<$var> for $crate::Fixed<N> {
-                type Output = $crate::Plus<$crate::Fixed<N>, $var>;
+            impl<const N: usize> std::ops::Add<$var> for $crate::dim::Fixed<N> {
+                type Output = $crate::dim::Plus<$crate::dim::Fixed<N>, $var>;
                 #[inline]
                 fn add(self, rhs: $var) -> Self::Output {
-                    $crate::Plus(self, rhs)
-                }
-            }
-
-            impl $crate::Patch for $var {
-                type Target = Self;
-                #[inline]
-                fn patch(self) -> Self {
-                    self
+                    $crate::dim::Plus(self, rhs)
                 }
             }
         }
