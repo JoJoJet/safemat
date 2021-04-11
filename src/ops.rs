@@ -239,3 +239,69 @@ where
         })
     }
 }
+
+/// ```
+/// # use safemat::*;
+/// let a = mat![ 1, 2, 3 ; 4, 5, 6 ];
+/// let b = mat![ 4, 5, 6 ; 7, 8, 9 ];
+/// let c = a + b;
+/// assert_eq!(c, mat![ 5, 7, 9 ; 11, 13, 15 ]);
+/// ```
+/// Matrix dimensions must agree in order to do addition.
+/// ```compile_fail
+/// use safemat::*;
+/// let a = mat![ 1, 2, 3 ; 4, 5, 6 ];
+/// let b = mat![ 4, 5, 6 ];
+/// let c = a + b; // this fails.
+/// ```
+impl<T, U, V, M1, M2, N1, N2> Add<Matrix<U, M2, N2>> for Matrix<T, M1, N1>
+where
+    T: Add<U, Output = V>,
+    M1: Dim,
+    M2: Identity<M1>,
+    N1: Dim,
+    N2: Identity<N1>,
+{
+    type Output = Matrix<V, M1, N1>;
+    #[inline]
+    fn add(self, rhs: Matrix<U, M2, N2>) -> Self::Output {
+        assert_eq!(self.m.dim(), rhs.m.dim());
+        assert_eq!(self.n.dim(), rhs.n.dim());
+        Matrix::try_from_iter_with_dim(
+            self.m,
+            self.n,
+            self.into_iter().zip(rhs.into_iter()).map(|(t, u)| t + u),
+        )
+        .unwrap()
+    }
+}
+
+/// Addition by reference.
+/// ```
+/// # use safemat::*;
+/// let a = mat![ 1, 2, 3 ];
+/// let b = mat![ 2, 2, 2 ];
+/// let c = &a + &b;
+/// assert_eq!(c, mat![ 3, 4, 5 ]);
+/// ```
+impl<T, U, V, M1, M2, N1, N2> Add<&'_ Matrix<U, M2, N2>> for &'_ Matrix<T, M1, N1>
+where
+    for<'a, 'b> &'a T: Add<&'b U, Output = V>,
+    M1: Dim,
+    M2: Identity<M1>,
+    N1: Dim,
+    N2: Identity<N1>,
+{
+    type Output = Matrix<V, M1, N1>;
+    #[inline]
+    fn add(self, rhs: &Matrix<U, M2, N2>) -> Self::Output {
+        assert_eq!(self.m.dim(), rhs.m.dim());
+        assert_eq!(self.n.dim(), rhs.n.dim());
+        Matrix::try_from_iter_with_dim(
+            self.m,
+            self.n,
+            self.iter().zip(rhs.iter()).map(|(t, u)| t + u),
+        )
+        .unwrap()
+    }
+}
