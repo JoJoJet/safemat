@@ -50,17 +50,14 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     ///     [6.0, 7.0, 8.0],
     /// ]));
     /// ```
+    #[inline]
     pub fn map<U, F: FnMut(usize, usize, T) -> U>(self, mut f: F) -> Matrix<U, M, N> {
-        let m = self.m;
-        let n = self.n;
-        let mut items = Vec::with_capacity(m.dim() * n.dim());
-        items.extend(self.into_iter().indices().map(|(i, j, itm)| f(i, j, itm)));
-        debug_assert_eq!(items.len(), m.dim() * n.dim());
-        Matrix {
-            m,
-            n,
-            items: items.into_boxed_slice(),
-        }
+        Matrix::try_from_iter_with_dim(
+            self.m,
+            self.n,
+            self.into_iter().indices().map(|(i, j, itm)| f(i, j, itm)),
+        )
+        .unwrap()
     }
 
     /// Tries to convert `M` to a known fixed dimension.
@@ -69,10 +66,10 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// let len = 4; // a variable with some unknown value.
     /// let mat = Matrix::from_fn_with_dim(dim!(len), dim!(1), |i, _| i+1);
     /// // We don't know how tall it is, so let's try to convert its `M` dimension.
-    /// match mat.try_m::<2>() {
+    /// match mat.fix_m::<2>() {
     ///     Ok(mat) => panic!("this shouldn't have worked, pardner..."),
     ///     // It didn't work, so lets try again.
-    ///     Err(mat) => match mat.try_m::<4>() {
+    ///     Err(mat) => match mat.fix_m::<4>() {
     ///         Ok(_) => println!("howdy"),
     ///         Err(_) => panic!("i have no earthly idea what this is"),
     ///     }

@@ -1,4 +1,7 @@
-use std::ops::{Index, IndexMut};
+use std::{
+    iter::FromIterator,
+    ops::{Index, IndexMut},
+};
 
 pub use num_traits::{One, Zero};
 
@@ -33,6 +36,14 @@ where
 }
 impl<T: Eq, M: Dim + Eq, N: Dim + Eq> Eq for Matrix<T, M, N> {}
 
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[error("not enough items to fill a {m}x{n} matrix; iterator only contained {num}")]
+pub struct FromIterError {
+    m: usize,
+    n: usize,
+    num: usize,
+}
+
 impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     #[inline]
     pub fn default_with_dim(m: M, n: N) -> Self
@@ -59,6 +70,52 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
         }
     }
 
+    /// Creates a new matrix with specified dimensions, populating its entries with the item of an iterator.
+    /// Fails if the iterator does not contain enough items to completely fill it.
+    /// ```
+    /// # use safemat::*;
+    /// // Creating a matrix from an iterator...
+    /// let iter = vec![1, 2, 3, 4].into_iter();
+    /// assert_eq!(
+    ///     Matrix::try_from_iter_with_dim(dim!(1), dim!(4), iter),
+    ///     Ok(mat![1, 2, 3, 4])
+    /// );
+    ///
+    /// // It will fail if there's not enough items.
+    /// let iter = vec![1, 2].into_iter();
+    /// assert!(matches!(
+    ///     Matrix::try_from_iter_with_dim(dim!(1), dim!(4), iter),
+    ///     Err(_)
+    /// ));
+    ///
+    /// // Any extra items will be ignored.
+    /// let iter = vec![1, 2, 3, 4, 5].into_iter();
+    /// assert_eq!(
+    ///     Matrix::try_from_iter_with_dim(dim!(1), dim!(3), iter),
+    ///     Ok(mat![1, 2, 3])
+    /// )
+    /// ```
+    pub fn try_from_iter_with_dim(
+        m: M,
+        n: N,
+        iter: impl IntoIterator<Item = T>,
+    ) -> Result<Self, FromIterError> {
+        let len = m.dim() * n.dim();
+        let mut items = Vec::with_capacity(len);
+        items.extend(iter.into_iter().take(len));
+        if items.len() < len {
+            return Err(FromIterError {
+                m: m.dim(),
+                n: n.dim(),
+                num: items.len(),
+            });
+        }
+        Ok(Self {
+            m,
+            n,
+            items: items.into_boxed_slice(),
+        })
+    }
 }
 
 impl<T: Zero + One, N: Dim> Matrix<T, N, N> {
@@ -103,6 +160,18 @@ impl<T, const M: usize, const N: usize> FixedMat<T, M, N> {
             n: Fixed::<N>,
             items: items.into_boxed_slice(),
         }
+    }
+
+    #[inline]
+    pub fn try_from_iter(iter: impl IntoIterator<Item = T>) -> Result<Self, FromIterError> {
+        Self::try_from_iter_with_dim(Fixed, Fixed, iter)
+    }
+}
+
+impl<T, const M: usize, const N: usize> FromIterator<T> for FixedMat<T, M, N> {
+    #[inline]
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        Self::try_from_iter(iter).unwrap()
     }
 }
 
