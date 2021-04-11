@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     dim::{Fixed, Identity},
-    Dim, Matrix,
+    Dim, Matrix, RowVec,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -220,10 +220,10 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
 /// let b = Matrix::from_fn_with_dim(k, dim!(2), |i, j| (i + j) as i32);
 /// let c = &a * &b;
 /// ```
-impl<'a, T, U, V, M, K1, K2, N> Mul<&'a Matrix<U, K2, N>> for &'a Matrix<T, M, K1>
+impl<T, U, V, M, K1, K2, N> Mul<&'_ Matrix<U, K2, N>> for &'_ Matrix<T, M, K1>
 where
     V: Sum,
-    for<'b> &'b T: Mul<&'b U, Output = V>,
+    for<'a, 'b> &'a T: Mul<&'b U, Output = V>,
     M: Dim,
     K1: Dim,
     K2: Identity<K1>,
@@ -231,9 +231,9 @@ where
 {
     type Output = Matrix<V, M, N>;
     #[inline]
-    fn mul(self, rhs: &'a Matrix<U, K2, N>) -> Self::Output {
-        assert_eq!(self.n.dim(), rhs.m.dim());
+    fn mul(self, rhs: &Matrix<U, K2, N>) -> Self::Output {
         let k = self.n.dim();
+        assert_eq!(k, rhs.m.dim());
         Matrix::from_fn_with_dim(self.m, rhs.n, |i, j| {
             (0..k).map(|k| &self[[i, k]] * &rhs[[k, j]]).sum()
         })
@@ -301,6 +301,105 @@ where
             self.m,
             self.n,
             self.iter().zip(rhs.iter()).map(|(t, u)| t + u),
+        )
+        .unwrap()
+    }
+}
+
+impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
+    /// Adds a scalar value to each entry in this matrix.
+    /// ```
+    /// # use safemat::*;
+    /// let a = mat![ 1, 2 ; 3, 4 ];
+    /// let b = a.add_scalar(2);
+    /// assert_eq!(b, mat![ 3, 4 ; 5, 6 ]);
+    /// ```
+    #[inline]
+    pub fn add_scalar<U, V>(self, u: U) -> Matrix<V, M, N>
+    where
+        T: Add<U, Output = V>,
+        U: Clone,
+    {
+        Matrix::try_from_iter_with_dim(self.m, self.n, self.into_iter().map(|t| t + u.clone()))
+            .unwrap()
+    }
+
+    /// Adds a scalar value to each entry in this matrix,
+    /// then returns a new matrix without moving anything.
+    /// ```
+    /// # use safemat::*;
+    /// let a = mat![ 1, 2 ; 3, 4 ];
+    /// let b = a.add_scalar_ref(&1);
+    /// assert_eq!(b, mat![ 2, 3 ; 4, 5 ]);
+    /// ```
+    #[inline]
+    pub fn add_scalar_ref<U, V>(&self, u: &U) -> Matrix<V, M, N>
+    where
+        for<'a, 'b> &'a T: Add<&'b U, Output = V>,
+    {
+        Matrix::try_from_iter_with_dim(self.m, self.n, self.iter().map(|t| t + u)).unwrap()
+    }
+
+    /// Adds the specified row vector to each row of this matrix.
+    /// ```
+    /// # use safemat::*;
+    /// let a = Matrix::from_array([
+    ///     [ 1, 2, 3 ],
+    ///     [ 4, 5, 6 ],
+    ///     [ 7, 8, 9 ]
+    /// ]);
+    /// let r = mat![ 1, 2, 3 ];
+    ///
+    /// assert_eq!(a.add_row(r), Matrix::from_array([
+    ///     [ 2, 4,  6  ],
+    ///     [ 5, 7,  9  ],
+    ///     [ 8, 10, 12 ]
+    /// ]));
+    /// ```
+    #[inline]
+    pub fn add_row<U, V, N2>(self, row: RowVec<U, N2>) -> Matrix<V, M, N>
+    where
+        T: Add<U, Output = V>,
+        U: Clone,
+        N2: Identity<N>,
+    {
+        assert_eq!(self.n.dim(), row.n.dim());
+        Matrix::try_from_iter_with_dim(
+            self.m,
+            self.n,
+            self.into_rows()
+                .map(|r1| r1 + row.clone())
+                .flat_map(IntoIterator::into_iter),
+        )
+        .unwrap()
+    }
+
+    /// Adds the specified row vector to each row of this matrix,
+    /// returning a new matrix without moving anything
+    /// ```
+    /// # use safemat::*;
+    /// let a = Matrix::from_array([
+    ///     [ 1, 2, 3 ],
+    ///     [ 4, 5, 6 ],
+    /// ]);
+    /// let r = mat![ 1, 2, 3 ];
+    ///
+    /// assert_eq!(a.add_row_ref(&r), Matrix::from_array([
+    ///     [ 2, 4, 6 ],
+    ///     [ 5, 7, 9 ],
+    /// ]));
+    /// ```
+    pub fn add_row_ref<U, V, N2>(&self, row: &RowVec<U, N2>) -> Matrix<V, M, N>
+    where
+        for<'a, 'b> &'a T: Add<&'b U, Output = V>,
+        N2: Identity<N>,
+    {
+        assert_eq!(self.n.dim(), row.n.dim());
+        Matrix::try_from_iter_with_dim(
+            self.m,
+            self.n,
+            self.rows()
+                .flat_map(|r1| r1.zip(row.iter()).map(|(t, u)| t + u)),
         )
         .unwrap()
     }
