@@ -29,16 +29,7 @@ impl<const N: usize> Patch for Fixed<N> {
     }
 }
 
-impl<const A: usize, const B: usize> Add<Fixed<B>> for Fixed<A> {
-    type Output = FixedPlus<A, B>;
-    #[inline]
-    fn add(self, _: Fixed<B>) -> Self::Output {
-        FixedPlus
-    }
-}
-
-/// The sum of two dimensions, at least one of which should be variable.
-/// If they are both constant, use [`FixedPlus`] instead.
+/// The sum of two dimensions.
 #[derive(Clone, Copy, Debug, Eq)]
 pub struct Plus<A: Dim, B: Dim>(pub A, pub B);
 
@@ -64,63 +55,54 @@ impl<A: Dim, B: Dim> Patch for Plus<A, B> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct FixedPlus<const A: usize, const B: usize>;
 
-impl<const A: usize, const B: usize> Dim for FixedPlus<A, B> {
-    #[inline]
-    fn dim(&self) -> usize {
-        A + B
-    }
-}
-
-macro_rules! impl_patch {
+macro_rules! impl_add {
     ($sum: literal;; $sub: expr) => {
-        impl Patch for FixedPlus::<{$sum - $sub}, {$sub}> {
-            type Target = Fixed::<{$sum}>;
+        impl Add<Fixed::<{$sub}>> for Fixed::<{$sum - $sub}> {
+            type Output = Fixed::<{$sum}>;
             #[inline]
-            fn patch(self) -> Self::Target {
+            fn add(self, _: Fixed::<{$sub}>) -> Self::Output {
                 Fixed
             }
         }
     };
     ($sum: literal; $($sub: literal),* ;) => {
-        $(impl_patch!($sum;; $sub);)*
-        $(impl_patch!($sum;; { $sum - $sub });)*
-        impl_patch!($sum;; {$sum / 2});
+        $(impl_add!($sum;; $sub);)*
+        $(impl_add!($sum;; { $sum - $sub });)*
+        impl_add!($sum;; {$sum / 2});
     };
     ($sum: literal; $($sub: literal),*) => {
-        $(impl_patch!($sum;; $sub);)*
-        $(impl_patch!($sum;; { $sum - $sub});)*
+        $(impl_add!($sum;; $sub);)*
+        $(impl_add!($sum;; { $sum - $sub});)*
     };
 }
 
-impl_patch!(2; 0 ;);
-impl_patch!(3; 0, 1);
-impl_patch!(4; 0, 1 ;);
-impl_patch!(5; 0, 1, 2);
-impl_patch!(6; 0, 1, 2 ;);
-impl_patch!(7; 0, 1, 2, 3);
-impl_patch!(8; 0, 1, 2, 3 ;);
-impl_patch!(9; 0, 1, 2, 3, 4);
-impl_patch!(10; 0, 1, 2, 3, 4 ;);
-impl_patch!(11; 0, 1, 2, 3, 4, 5);
-impl_patch!(12; 0, 1, 2, 3, 4, 5 ;);
-impl_patch!(13; 0, 1, 2, 3, 4, 5, 6);
-impl_patch!(14; 0, 1, 2, 3, 4, 5, 6 ;);
-impl_patch!(15; 0, 1, 2, 3, 4, 5, 6, 7);
-impl_patch!(16; 0, 1, 2, 3, 4, 5, 6, 7 ;);
-impl_patch!(32; 0, 8 ;);
-impl_patch!(64; 0, 16 ;);
-impl_patch!(128; 0, 32 ;);
-impl_patch!(256; 0, 64 ;);
-impl_patch!(512; 0, 128 ;);
-impl_patch!(1024; 0, 256 ;);
-impl_patch!(2048; 0, 512 ;);
-impl_patch!(4096; 0, 1024 ;);
-impl_patch!(8192; 0, 2048 ;);
-impl_patch!(16_384; 0, 4096 ;);
-impl_patch!(32_768; 0, 8192 ;);
+impl_add!(2; 0 ;);
+impl_add!(3; 0, 1);
+impl_add!(4; 0, 1 ;);
+impl_add!(5; 0, 1, 2);
+impl_add!(6; 0, 1, 2 ;);
+impl_add!(7; 0, 1, 2, 3);
+impl_add!(8; 0, 1, 2, 3 ;);
+impl_add!(9; 0, 1, 2, 3, 4);
+impl_add!(10; 0, 1, 2, 3, 4 ;);
+impl_add!(11; 0, 1, 2, 3, 4, 5);
+impl_add!(12; 0, 1, 2, 3, 4, 5 ;);
+impl_add!(13; 0, 1, 2, 3, 4, 5, 6);
+impl_add!(14; 0, 1, 2, 3, 4, 5, 6 ;);
+impl_add!(15; 0, 1, 2, 3, 4, 5, 6, 7);
+impl_add!(16; 0, 1, 2, 3, 4, 5, 6, 7 ;);
+impl_add!(32; 0, 8 ;);
+impl_add!(64; 0, 16 ;);
+impl_add!(128; 0, 32 ;);
+impl_add!(256; 0, 64 ;);
+impl_add!(512; 0, 128 ;);
+impl_add!(1024; 0, 256 ;);
+impl_add!(2048; 0, 512 ;);
+impl_add!(4096; 0, 1024 ;);
+impl_add!(8192; 0, 2048 ;);
+impl_add!(16_384; 0, 4096 ;);
+impl_add!(32_768; 0, 8192 ;);
 
 /// Evaluates to an expression implementing [safemat::Dim], based on the input expression.
 /// If the input is a usize literal, this will evaluate to a monomorphiztation of [safemat::FixedMat].
