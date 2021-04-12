@@ -28,6 +28,13 @@ pub trait Identity<B: Dim>: Dim {
     fn identity(self) -> B;
 }
 
+impl<T: Dim> Identity<T> for T {
+    #[inline]
+    fn identity(self) -> Self {
+        self
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Fixed<const N: usize>;
 
@@ -38,14 +45,10 @@ impl<const N: usize> Dim for Fixed<N> {
     }
 }
 
-impl<const N: usize> Identity<Fixed<N>> for Fixed<N> {
-    #[inline]
-    fn identity(self) -> Self {
-        self
-    }
-}
-
 /// The sum of two dimensions.
+///
+/// If one is variable and one is constant,
+/// the variable should be on the left.
 #[derive(Clone, Copy, Debug, Eq)]
 pub struct Plus<A: Dim, B: Dim> {
     val: usize,
@@ -75,17 +78,6 @@ impl<A: Dim, B: Dim, C: Dim> PartialEq<C> for Plus<A, B> {
     #[inline]
     fn eq(&self, rhs: &C) -> bool {
         self.val == rhs.dim()
-    }
-}
-
-impl<A: Dim, B: Dim> Identity<Plus<B, A>> for Plus<A, B> {
-    #[inline]
-    fn identity(self) -> Plus<B, A> {
-        Plus {
-            val: self.val,
-            _a: PhantomData,
-            _b: PhantomData,
-        }
     }
 }
 
@@ -184,13 +176,6 @@ macro_rules! dim {
                 }
             }
 
-            impl $crate::dim::Identity<$var> for $var {
-                #[inline]
-                fn identity(self) -> Self {
-                    self
-                }
-            }
-
             use $crate::Dim as _;
             impl<B: $crate::Dim> std::cmp::PartialEq<B> for $var {
                 #[inline]
@@ -213,10 +198,10 @@ macro_rules! dim {
                 }
             }
             impl<const N: usize> std::ops::Add<$var> for $crate::dim::Fixed<N> {
-                type Output = $crate::dim::Plus<$crate::dim::Fixed<N>, $var>;
+                type Output = $crate::dim::Plus<$var, $crate::dim::Fixed<N>>;
                 #[inline]
                 fn add(self, rhs: $var) -> Self::Output {
-                    $crate::dim::Plus::new(self, rhs)
+                    $crate::dim::Plus::new(rhs, self)
                 }
             }
         }
