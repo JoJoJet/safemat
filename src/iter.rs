@@ -328,10 +328,10 @@ impl<T, M: Dim, N: Dim> FusedIterator for IntoRows<T, M, N> {}
 /// # use safemat::*;
 /// let mat = mat![ 1, 2 ; 3, 4 ; 5, 6 ];
 /// let mut i = mat.rows();
-/// assert_eq!(i.next().unwrap(), [1, 2].as_ref());
-/// assert_eq!(i.next().unwrap(), [3, 4].as_ref());
-/// assert_eq!(i.next().unwrap(), [5, 6].as_ref());
-/// assert_eq!(i.next(), None);
+/// assert_eq!(i.next().unwrap(), &mat![1, 2]);
+/// assert_eq!(i.next().unwrap(), &mat![3, 4]);
+/// assert_eq!(i.next().unwrap(), &mat![5, 6]);
+/// assert!(i.next().is_none());
 /// ```
 pub struct Rows<'a, T, M: Dim, N: Dim> {
     mat: &'a Matrix<T, M, N>,
@@ -339,16 +339,12 @@ pub struct Rows<'a, T, M: Dim, N: Dim> {
 }
 
 impl<'a, T, M: Dim, N: Dim> Iterator for Rows<'a, T, M, N> {
-    type Item = RowView<'a, T, M, N>;
+    type Item = RowViewImpl<'a, T, N, M, N>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.i < self.mat.m.dim() {
             let i = self.i;
             self.i += 1;
-            Some(RowView {
-                mat: self.mat,
-                i,
-                j_iter: 0,
-            })
+            Some(self.mat.view(i, 0, dim!(1), self.mat.n))
         } else {
             None
         }
@@ -420,10 +416,10 @@ impl<T, M: Dim, N: Dim> FusedIterator for IntoColumns<T, M, N> {}
 /// # use safemat::*;
 /// let mat = mat![ 1, 2, 3 ; 4, 5, 6 ; 7, 8, 9 ];
 /// let mut i = mat.columns();
-/// assert_eq!(i.next().unwrap(), [1, 4, 7].as_ref());
-/// assert_eq!(i.next().unwrap(), [2, 5, 8].as_ref());
-/// assert_eq!(i.next().unwrap(), [3, 6, 9].as_ref());
-/// assert_eq!(i.next(), None);
+/// assert_eq!(i.next().unwrap(), &mat![1; 4; 7]);
+/// assert_eq!(i.next().unwrap(), &mat![2; 5; 8]);
+/// assert_eq!(i.next().unwrap(), &mat![3; 6; 9]);
+/// assert!(i.next().is_none());
 /// ```
 pub struct Columns<'a, T, M: Dim, N: Dim> {
     mat: &'a Matrix<T, M, N>,
@@ -431,16 +427,12 @@ pub struct Columns<'a, T, M: Dim, N: Dim> {
 }
 
 impl<'a, T, M: Dim, N: Dim> Iterator for Columns<'a, T, M, N> {
-    type Item = ColumnView<'a, T, M, N>;
+    type Item = ColumnViewImpl<'a, T, M, M, N>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.j < self.mat.n.dim() {
             let j = self.j;
             self.j += 1;
-            Some(ColumnView {
-                mat: self.mat,
-                j,
-                i_iter: 0,
-            })
+            Some(self.mat.view(0, j, self.mat.m, dim!(1)))
         } else {
             None
         }

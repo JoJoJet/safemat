@@ -5,6 +5,7 @@ use std::{
 
 use crate::{
     dim::{Fixed, Identity},
+    view::{IntoRowView, IntoView, View},
     Dim, Matrix, RowVec,
 };
 
@@ -276,7 +277,7 @@ where
     }
 }
 
-/// Addition by reference.
+/// Addition by reference. This only works for heterogenous types.
 /// ```
 /// # use safemat::*;
 /// let a = mat![ 1, 2, 3 ];
@@ -284,19 +285,19 @@ where
 /// let c = &a + &b;
 /// assert_eq!(c, mat![ 3, 4, 5 ]);
 /// ```
-impl<T, U, V, M1, M2, N1, N2> Add<&'_ Matrix<U, M2, N2>> for &'_ Matrix<T, M1, N1>
+impl<'a, T, V, M, N, Rhs> Add<Rhs> for &'a Matrix<T, M, N>
 where
-    for<'a, 'b> &'a T: Add<&'b U, Output = V>,
-    M1: Dim,
-    M2: Identity<M1>,
-    N1: Dim,
-    N2: Identity<N1>,
+    Rhs: IntoView<'a, T, M, N>,
+    for<'b> &'a T: Add<&'b T, Output = V>,
+    M: Dim,
+    N: Dim,
 {
-    type Output = Matrix<V, M1, N1>;
+    type Output = Matrix<V, M, N>;
     #[inline]
-    fn add(self, rhs: &Matrix<U, M2, N2>) -> Self::Output {
-        assert_eq!(self.m.dim(), rhs.m.dim());
-        assert_eq!(self.n.dim(), rhs.n.dim());
+    fn add(self, rhs: Rhs) -> Self::Output {
+        let rhs = rhs.into_view();
+        assert_eq!(self.m.dim(), rhs.m().dim());
+        assert_eq!(self.n.dim(), rhs.n().dim());
         Matrix::try_from_iter_with_dim(
             self.m,
             self.n,
@@ -389,17 +390,18 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     ///     [ 5, 7, 9 ],
     /// ]));
     /// ```
-    pub fn add_row_ref<U, V, N2>(&self, row: &RowVec<U, N2>) -> Matrix<V, M, N>
+    pub fn add_row_ref<'a, U: 'a, V>(&'a self, row: impl IntoRowView<'a, U, N>) -> Matrix<V, M, N>
     where
-        for<'a, 'b> &'a T: Add<&'b U, Output = V>,
-        N2: Identity<N>,
+        for<'b> &'a T: Add<&'b U, Output = V>,
     {
-        assert_eq!(self.n.dim(), row.n.dim());
+        let row = row.into_view();
+        let n = self.n.dim();
+        assert_eq!(n, row.n().dim());
         Matrix::try_from_iter_with_dim(
             self.m,
             self.n,
             self.rows()
-                .flat_map(|r1| r1.zip(row.iter()).map(|(t, u)| t + u)),
+                .flat_map(|r1| r1.iter().zip(row.iter()).map(|(t, u)| t + u)),
         )
         .unwrap()
     }
