@@ -36,12 +36,15 @@ use crate::{Dim, Matrix};
 /// assert_eq!(v[[1, 1]], 13);
 /// assert_eq!(v[[1, 2]], 14);
 /// ```
-pub trait View<'a, T, M: Dim, N: Dim>
+pub trait View<'a, T: 'a, M: Dim, N: Dim>
 where
     Self: Index<usize, Output = T> + Index<[usize; 2], Output = T>,
 {
     fn m(&self) -> M;
     fn n(&self) -> N;
+
+    type Iter: Iterator<Item = &'a T>;
+    fn iter(&self) -> Self::Iter;
 }
 
 /// A view into a matrix; a reference to a matrix.
@@ -52,6 +55,7 @@ where
 /// `Mo`, `No`, the dimensions of the original matrix.
 ///
 /// For examples, see [`View`].
+#[derive(Debug)]
 pub struct MatrixView<'mat, T, Ms, Ns, Mo, No> {
     mat: &'mat Matrix<T, Mo, No>,
     m: Ms,
@@ -60,8 +64,9 @@ pub struct MatrixView<'mat, T, Ms, Ns, Mo, No> {
     j: usize,
 }
 
+use crate::iter::MatrixViewIter;
 impl<'a, T: 'a, Ms: Dim, Ns: Dim, Mo: Dim, No: Dim> View<'a, T, Ms, Ns>
-    for MatrixView<'_, T, Ms, Ns, Mo, No>
+    for MatrixView<'a, T, Ms, Ns, Mo, No>
 {
     #[inline]
     fn m(&self) -> Ms {
@@ -70,6 +75,18 @@ impl<'a, T: 'a, Ms: Dim, Ns: Dim, Mo: Dim, No: Dim> View<'a, T, Ms, Ns>
     #[inline]
     fn n(&self) -> Ns {
         self.n
+    }
+    type Iter = MatrixViewIter<'a, T, Ms, Ns, Mo, No>;
+    fn iter(&self) -> Self::Iter {
+        MatrixViewIter {
+            mat: self.mat,
+            m: self.m,
+            n: self.n,
+            i: self.i,
+            j: self.j,
+            i_iter: 0,
+            j_iter: 0,
+        }
     }
 }
 
@@ -104,7 +121,7 @@ impl<T, Ms: Dim, Ns: Dim, Mo: Dim, No: Dim> Index<[usize; 2]>
 
 /// A type from which you can obtain a [`View`] of a specific size.
 /// This is implemented by [`Matrix`] as well as every `View` type.
-pub trait IntoView<'a, T, M: Dim, N: Dim>: Sized + 'a {
+pub trait IntoView<'a, T: 'a, M: Dim, N: Dim>: Sized + 'a {
     type View: View<'a, T, M, N> + 'a;
     /// Gets a [`View`] from this instance.
     /// If the implementing type is a matrix, this should return

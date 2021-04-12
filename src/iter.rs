@@ -105,6 +105,74 @@ impl<T, M: Dim, N: Dim> DoubleEndedIterator for IntoIter<T, M, N> {
 
 impl<T, M: Dim, N: Dim> ExactSizeIterator for IntoIter<T, M, N> {}
 
+/// An iterator over the elements of a [`MatrixView`].
+/// ```
+/// # use safemat::*;
+/// # use safemat::view::View;
+/// let m = mat![ 1, 2, 3, 4 ; 5, 6, 7, 8 ; 9, 10, 11, 12 ];
+/// let mut i = m.view(1, 1, dim!(2), dim!(2)).iter();
+/// assert_eq!(i.next(), Some(&6));
+/// assert_eq!(i.next(), Some(&7));
+/// assert_eq!(i.next(), Some(&10));
+/// assert_eq!(i.next(), Some(&11));
+/// assert_eq!(i.next(), None);
+/// ```
+pub struct MatrixViewIter<'a, T, Ms, Ns, Mo, No> {
+    pub(crate) mat: &'a Matrix<T, Mo, No>,
+    pub(crate) m: Ms,
+    pub(crate) n: Ns,
+    pub(crate) i: usize,
+    pub(crate) j: usize,
+    pub(crate) i_iter: usize,
+    pub(crate) j_iter: usize,
+}
+
+impl<'a, T, Ms, Ns, Mo, No> Iterator for MatrixViewIter<'a, T, Ms, Ns, Mo, No>
+where
+    Ms: Dim,
+    Ns: Dim,
+    Mo: Dim,
+    No: Dim,
+{
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        let i = self.i_iter;
+        if i < self.m.dim() {
+            let j = self.j_iter;
+            if j < self.n.dim() - 1 {
+                self.j_iter += 1;
+            } else {
+                self.j_iter = 0;
+                self.i_iter += 1;
+            }
+            let i = self.i + i;
+            let j = self.j + j;
+            Some(&self.mat.items[i * self.mat.n.dim() + j])
+        } else {
+            None
+        }
+    }
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+}
+
+impl<T, Ms, Ns, Mo, No> ExactSizeIterator for MatrixViewIter<'_, T, Ms, Ns, Mo, No>
+where
+    Ms: Dim,
+    Ns: Dim,
+    Mo: Dim,
+    No: Dim,
+{
+    #[inline]
+    fn len(&self) -> usize {
+        let idx = self.i_iter * self.n.dim() + self.j_iter;
+        self.m.dim() * self.n.dim() - idx
+    }
+}
+
 /// An iterator over the references to the items in a matrix.
 /// To get the indices of each item, see the `indices` method.
 /// ```
