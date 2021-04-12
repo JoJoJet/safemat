@@ -1,6 +1,6 @@
 use std::ops::Index;
 
-use crate::{Dim, Matrix};
+use crate::{dim, dim::Identity, Dim, Matrix};
 
 /// A view into (2D slice of) a matrix. Or, a reference to a matrix.
 /// # Examples
@@ -119,13 +119,44 @@ impl<T, Ms: Dim, Ns: Dim, Mo: Dim, No: Dim> Index<[usize; 2]>
     }
 }
 
+impl<'a, T, Ms, Ns, Mo, No, Rhs> PartialEq<Rhs> for MatrixView<'a, T, Ms, Ns, Mo, No>
+where
+    T: PartialEq,
+    Ms: Dim,
+    Ns: Dim,
+    Mo: Dim,
+    No: Dim,
+    Rhs: IntoView<'a, T, Ms, Ns> + Clone,
+{
+    fn eq(&self, rhs: &Rhs) -> bool {
+        self.iter()
+            .zip(rhs.clone().into_view().iter())
+            .all(|(a, b)| a == b)
+    }
+}
+
+impl<'a, T, M: Dim, N: Dim, M2: Identity<M>, N2: Identity<N>> View<'a, T, M, N> for &'a Matrix<T, M2, N2> {
+    #[inline]
+    fn m(&self) -> M {
+        self.m.identity()
+    }
+    #[inline]
+    fn n(&self) -> N {
+        self.n.identity()
+    }
+
+    type Iter = crate::iter::Iter<'a, T, M2, N2>;
+    #[inline]
+    fn iter(&self) -> Self::Iter {
+        Matrix::iter(self)
+    }
+}
+
 /// A type from which you can obtain a [`View`] of a specific size.
 /// This is implemented by [`Matrix`] as well as every `View` type.
 pub trait IntoView<'a, T: 'a, M: Dim, N: Dim>: Sized + 'a {
     type View: View<'a, T, M, N> + 'a;
     /// Gets a [`View`] from this instance.
-    /// If the implementing type is a matrix, this should return
-    /// a new [`MatrixView`] encompassing the entire matrix.
     ///
     /// If the implementing type is already a `View`,
     /// it should simply return itself.
@@ -145,10 +176,11 @@ where
     }
 }
 
-impl<'a, T, M: Dim, N: Dim> IntoView<'a, T, M, N> for &'a Matrix<T, M, N> {
-    type View = MatrixView<'a, T, M, N, M, N>;
+impl<'a, T, M: Dim, N: Dim, M2: Identity<M>, N2: Identity<N>> IntoView<'a, T, M, N> for &'a Matrix<T, M2, N2> {
+    type View = Self;
+    #[inline]
     fn into_view(self) -> Self::View {
-        self.view(0, 0, self.m, self.n)
+        self
     }
 }
 

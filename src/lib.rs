@@ -192,6 +192,13 @@ impl<T, M: Dim, N: Dim> Index<usize> for Matrix<T, M, N> {
         &self.items[i]
     }
 }
+impl<T, M: Dim, N: Dim> Index<usize> for &'_ Matrix<T, M, N> {
+    type Output = T;
+    #[inline]
+    fn index(&self, i: usize) -> &T {
+        &self.items[i]
+    }
+}
 impl<T, M: Dim, N: Dim> IndexMut<usize> for Matrix<T, M, N> {
     #[inline]
     fn index_mut(&mut self, i: usize) -> &mut T {
@@ -201,10 +208,18 @@ impl<T, M: Dim, N: Dim> IndexMut<usize> for Matrix<T, M, N> {
 
 impl<T, M: Dim, N: Dim> Index<[usize; 2]> for Matrix<T, M, N> {
     type Output = T;
+    #[inline]
     fn index(&self, [i, j]: [usize; 2]) -> &T {
         assert!(i < self.m.dim());
         assert!(j < self.n.dim());
         &self.items[i * self.n.dim() + j]
+    }
+}
+impl<T, M: Dim, N: Dim> Index<[usize; 2]> for &'_ Matrix<T, M, N> {
+    type Output = T;
+    #[inline]
+    fn index(&self, i: [usize; 2]) -> &T {
+        Matrix::index(self, i)
     }
 }
 impl<T, M: Dim, N: Dim> IndexMut<[usize; 2]> for Matrix<T, M, N> {
