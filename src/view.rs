@@ -147,7 +147,7 @@ where
 
 /// Interchanges the indices when accessing a matrix view.
 /// ```
-/// # use safemat::{*, view::View, ops::ViewOps};
+/// # use safemat::prelude::*;
 /// let a = Matrix::from_array([
 ///     [1, 2, 3, 4],
 ///     [5, 6, 6, 7],

@@ -325,7 +325,7 @@ impl<T, M: Dim, N: Dim> FusedIterator for IntoRows<T, M, N> {}
 
 /// An iterator over the rows of a matrix.
 /// ```
-/// # use safemat::*;
+/// # use safemat::prelude::*;
 /// let mat = mat![ 1, 2 ; 3, 4 ; 5, 6 ];
 /// let mut i = mat.rows();
 /// assert_eq!(i.next().unwrap(), &mat![1, 2]);

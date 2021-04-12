@@ -6,12 +6,20 @@ use std::{
 pub use num_traits::{One, Zero};
 
 pub mod dim;
-pub use dim::Dim;
-use dim::Fixed;
+use dim::{Dim, Fixed};
 
 pub mod view;
 
 pub mod iter;
+
+pub mod prelude {
+    pub use crate::dim::{Dim, Identity};
+    pub use crate::view::{View, IntoView, RowView, IntoRowView, ColumnView};
+    pub use crate::ops::ViewOps;
+    pub use crate::Matrix;
+    pub use crate::mat;
+    pub use crate::dim;
+}
 
 #[derive(Clone, Debug)]
 pub struct Matrix<T, M, N> {

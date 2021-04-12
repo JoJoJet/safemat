@@ -169,15 +169,15 @@ macro_rules! dim {
             #[allow(non_camel_case_types)]
             #[derive(Clone, Copy, Debug, Eq)]
             pub(super) struct $var(pub(super) usize);
-            impl $crate::Dim for $var {
+            impl $crate::dim::Dim for $var {
                 #[inline]
                 fn dim(&self) -> usize {
                     self.0
                 }
             }
 
-            use $crate::Dim as _;
-            impl<B: $crate::Dim> std::cmp::PartialEq<B> for $var {
+            use $crate::dim::Dim as _;
+            impl<B: $crate::dim::Dim> std::cmp::PartialEq<B> for $var {
                 #[inline]
                 fn eq(&self, rhs: &B) -> bool {
                     self.0 == rhs.dim()
@@ -190,7 +190,7 @@ macro_rules! dim {
                 }
             }
 
-            impl<B: $crate::Dim> std::ops::Add<B> for $var {
+            impl<B: $crate::dim::Dim> std::ops::Add<B> for $var {
                 type Output = $crate::dim::Plus<Self, B>;
                 #[inline]
                 fn add(self, rhs: B) -> Self::Output {

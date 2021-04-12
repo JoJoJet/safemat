@@ -348,7 +348,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// Adds the specified row vector to each row of this matrix,
     /// returning a new matrix without moving anything
     /// ```
-    /// # use safemat::*;
+    /// # use safemat::prelude::*;
     /// let a = Matrix::from_array([
     ///     [ 1, 2, 3 ],
     ///     [ 4, 5, 6 ],
