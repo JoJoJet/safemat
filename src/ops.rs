@@ -277,36 +277,6 @@ where
     }
 }
 
-/// Addition by reference. This only works for heterogenous types.
-/// ```
-/// # use safemat::*;
-/// let a = mat![ 1, 2, 3 ];
-/// let b = mat![ 2, 2, 2 ];
-/// let c = &a + &b;
-/// assert_eq!(c, mat![ 3, 4, 5 ]);
-/// ```
-impl<'a, T, V, M, N, Rhs> Add<Rhs> for &'a Matrix<T, M, N>
-where
-    Rhs: IntoView<'a, T, M, N>,
-    for<'b> &'a T: Add<&'b T, Output = V>,
-    M: Dim,
-    N: Dim,
-{
-    type Output = Matrix<V, M, N>;
-    #[inline]
-    fn add(self, rhs: Rhs) -> Self::Output {
-        let rhs = rhs.into_view();
-        assert_eq!(self.m.dim(), rhs.m().dim());
-        assert_eq!(self.n.dim(), rhs.n().dim());
-        Matrix::try_from_iter_with_dim(
-            self.m,
-            self.n,
-            self.iter().zip(rhs.iter()).map(|(t, u)| t + u),
-        )
-        .unwrap()
-    }
-}
-
 impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// Adds a scalar value to each entry in this matrix.
     /// ```
@@ -406,3 +376,45 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
         .unwrap()
     }
 }
+
+pub trait ViewOps<'a, T: 'a, M: Dim, N: Dim>: View<'a, T, M, N> {
+    /// Calculates the sum of two matricies by-reference,
+    /// returning a new owned [`Matrix`].
+    /// ```
+    /// # use safemat::{*, ops::ViewOps};
+    /// let a = mat![1, 2 ; 3, 4];
+    /// let b = mat![5, 6 ; 7, 8];
+    /// let c = a.as_view().add_ref(&b);
+    /// assert_eq!(c, mat![6, 8 ; 10, 12]);
+    /// ```
+    fn add_ref<U: 'a, V>(&'a self, rhs: impl IntoView<'a, U, M, N>) -> Matrix<V, M, N>
+    where
+        for<'b> &'a T: Add<&'b U, Output = V>,
+    {
+        let rhs = rhs.into_view();
+        Matrix::from_fn_with_dim(self.m(), self.n(), |i, j| &self[[i, j]] + &rhs[[i, j]])
+    }
+    /// Calculates the matrix product of two matrices by-reference,
+    /// returning a new owned [`Matrix`].
+    /// ```
+    /// # use safemat::*;
+    /// # use safemat::ops::ViewOps;
+    /// let a = mat![1, 2, 3];
+    /// let b = mat![4; 5; 6];
+    /// let c = a.as_view().mul_ref(&b);
+    /// assert_eq!(c, mat![32]);
+    /// ```
+    fn mul_ref<U: 'a, V, N2: Dim>(&'a self, rhs: impl IntoView<'a, U, N, N2>) -> Matrix<V, M, N2>
+    where
+        for<'b> &'a T: Mul<&'b U, Output = V>,
+        V: Sum,
+    {
+        let rhs = rhs.into_view();
+        let k = self.n().dim();
+        Matrix::from_fn_with_dim(self.m(), rhs.n(), |i, j| {
+            (0..k).map(|k| &self[[i, k]] * &rhs[[k, j]]).sum()
+        })
+    }
+}
+
+impl<'a, T: 'a, M: Dim, N: Dim, V: View<'a, T, M, N>> ViewOps<'a, T, M, N> for V {}
