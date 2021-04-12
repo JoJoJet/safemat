@@ -13,12 +13,12 @@ pub mod view;
 pub mod iter;
 
 pub mod prelude {
-    pub use crate::dim::{Dim, Identity};
-    pub use crate::view::{View, IntoView, RowView, IntoRowView, ColumnView};
-    pub use crate::ops::ViewOps;
-    pub use crate::Matrix;
-    pub use crate::mat;
     pub use crate::dim;
+    pub use crate::dim::Dim;
+    pub use crate::mat;
+    pub use crate::ops::ViewOps;
+    pub use crate::view::{ColumnView, IntoRowView, IntoView, RowView, View};
+    pub use crate::Matrix;
 }
 
 #[derive(Clone, Debug)]

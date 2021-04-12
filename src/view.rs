@@ -1,6 +1,6 @@
 use std::ops::Index;
 
-use crate::{dim, dim::Identity, Dim, Matrix};
+use crate::{dim, Dim, Matrix};
 
 /// A view into (2D slice of) a matrix. Or, a reference to a matrix.
 /// # Examples
@@ -220,11 +220,11 @@ where
 impl<'a, T, M: Dim, N: Dim> View<'a, T, M, N> for &'a Matrix<T, M, N> {
     #[inline]
     fn m(&self) -> M {
-        self.m.identity()
+        self.m
     }
     #[inline]
     fn n(&self) -> N {
-        self.n.identity()
+        self.n
     }
 
     type Iter = crate::iter::Iter<'a, T, M, N>;
@@ -312,15 +312,11 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     }
 
     #[inline]
-    pub fn as_view<M2: Dim, N2: Dim>(&self) -> MatrixView<'_, T, M2, N2, M, N>
-    where
-        M: Identity<M2>,
-        N: Identity<N2>,
-    {
+    pub fn as_view(&self) -> MatrixView<'_, T, M, N, M, N> {
         MatrixView {
             mat: self,
-            m: self.m.identity(),
-            n: self.n.identity(),
+            m: self.m,
+            n: self.n,
             i: 0,
             j: 0,
         }

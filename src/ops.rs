@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    dim::{Fixed, Identity},
+    dim::Fixed,
     view::{IntoRowView, IntoView, View},
     Dim, Matrix, RowVec,
 };
@@ -127,12 +127,11 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn vcat<M2, N2>(self, other: Matrix<T, M2, N2>) -> Matrix<T, <M as Add<M2>>::Output, N>
+    pub fn vcat<M2>(self, other: Matrix<T, M2, N>) -> Matrix<T, <M as Add<M2>>::Output, N>
     where
         M: Add<M2>,
         <M as Add<M2>>::Output: Dim,
         M2: Dim,
-        N2: Identity<N>,
     {
         assert_eq!(self.n.dim(), other.n.dim());
         let mut items = Vec::from(self.items);
@@ -155,9 +154,8 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// let c: FixedMat<_, 3, 2> = a.hcat(b); // Type annotations not necessary.
     /// assert_eq!(c, mat![ 1, 4 ; 2, 5 ; 3, 6 ]);
     /// ```
-    pub fn hcat<M2, N2>(self, other: Matrix<T, M2, N2>) -> Matrix<T, M, <N as Add<N2>>::Output>
+    pub fn hcat<N2>(self, other: Matrix<T, M, N2>) -> Matrix<T, M, <N as Add<N2>>::Output>
     where
-        M2: Identity<M>,
         N: Add<N2>,
         <N as Add<N2>>::Output: Dim,
         N2: Dim,
@@ -221,18 +219,17 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
 /// let b = Matrix::from_fn_with_dim(k, dim!(2), |i, j| (i + j) as i32);
 /// let c = &a * &b;
 /// ```
-impl<T, U, V, M, K1, K2, N> Mul<&'_ Matrix<U, K2, N>> for &'_ Matrix<T, M, K1>
+impl<T, U, V, M, K, N> Mul<&'_ Matrix<U, K, N>> for &'_ Matrix<T, M, K>
 where
     V: Sum,
     for<'a, 'b> &'a T: Mul<&'b U, Output = V>,
     M: Dim,
-    K1: Dim,
-    K2: Identity<K1>,
+    K: Dim,
     N: Dim,
 {
     type Output = Matrix<V, M, N>;
     #[inline]
-    fn mul(self, rhs: &Matrix<U, K2, N>) -> Self::Output {
+    fn mul(self, rhs: &Matrix<U, K, N>) -> Self::Output {
         let k = self.n.dim();
         assert_eq!(k, rhs.m.dim());
         Matrix::from_fn_with_dim(self.m, rhs.n, |i, j| {
@@ -255,17 +252,15 @@ where
 /// let b = mat![ 4, 5, 6 ];
 /// let c = a + b; // this fails.
 /// ```
-impl<T, U, V, M1, M2, N1, N2> Add<Matrix<U, M2, N2>> for Matrix<T, M1, N1>
+impl<T, U, V, M, N> Add<Matrix<U, M, N>> for Matrix<T, M, N>
 where
     T: Add<U, Output = V>,
-    M1: Dim,
-    M2: Identity<M1>,
-    N1: Dim,
-    N2: Identity<N1>,
+    M: Dim,
+    N: Dim,
 {
-    type Output = Matrix<V, M1, N1>;
+    type Output = Matrix<V, M, N>;
     #[inline]
-    fn add(self, rhs: Matrix<U, M2, N2>) -> Self::Output {
+    fn add(self, rhs: Matrix<U, M, N>) -> Self::Output {
         assert_eq!(self.m.dim(), rhs.m.dim());
         assert_eq!(self.n.dim(), rhs.n.dim());
         Matrix::try_from_iter_with_dim(
@@ -328,11 +323,10 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// ]));
     /// ```
     #[inline]
-    pub fn add_row<U, V, N2>(self, row: RowVec<U, N2>) -> Matrix<V, M, N>
+    pub fn add_row<U, V>(self, row: RowVec<U, N>) -> Matrix<V, M, N>
     where
         T: Add<U, Output = V>,
         U: Clone,
-        N2: Identity<N>,
     {
         assert_eq!(self.n.dim(), row.n.dim());
         Matrix::try_from_iter_with_dim(

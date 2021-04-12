@@ -5,36 +5,6 @@ pub trait Dim: Copy + 'static {
     fn dim(&self) -> usize;
 }
 
-/// A marker trait which asserts that the implementing type is just
-/// a different way of expressing the dimension `B`.
-///
-/// For example: [`Plus<A, B>`] = [`Plus<B, A>`].
-/// ```
-/// # use safemat::*;
-/// let len = 2;         // some spoopy unknown number.
-/// let len = dim!(len); // store the dim in a variable since the type is unnameable.
-/// let a = Matrix::from_fn_with_dim(dim!(1), len, |_, j| j + 1);
-/// let a = a.hcat(mat![3]); // N: Plus<len, 1>
-///
-/// let b = Matrix::from_fn_with_dim(len, dim!(1), |i, _| i + 2);
-/// let b = mat![1].vcat(b); // M: Plus<1, len>.
-///
-/// let c = &a * &b; // We can multiply them, because the Identity trait
-///                  // tells the type system that Plus<len, 1> = Plus<1, len>.
-/// assert_eq!(c, mat![14]);
-/// ```
-pub trait Identity<B: Dim>: Dim {
-    /// Converts this instance to the target type (should be zero-cost).
-    fn identity(self) -> B;
-}
-
-impl<T: Dim> Identity<T> for T {
-    #[inline]
-    fn identity(self) -> Self {
-        self
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Fixed<const N: usize>;
 
