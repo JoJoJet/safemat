@@ -1,4 +1,4 @@
-use std::ops::Add;
+use std::{marker::PhantomData, ops::Add};
 
 /// A value representing the length of a dimension of a matrix.
 pub trait Dim: Copy + 'static {
@@ -23,7 +23,10 @@ pub trait Dim: Copy + 'static {
 ///                  // tells the type system that Plus<len, 1> = Plus<1, len>.
 /// assert_eq!(c, mat![14]);
 /// ```
-pub trait Identity<B: Dim>: Dim {}
+pub trait Identity<B: Dim>: Dim {
+    /// Converts this instance to the target type (should be zero-cost).
+    fn identity(self) -> B;
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Fixed<const N: usize>;
@@ -35,27 +38,56 @@ impl<const N: usize> Dim for Fixed<N> {
     }
 }
 
-impl<const N: usize> Identity<Fixed<N>> for Fixed<N> {}
+impl<const N: usize> Identity<Fixed<N>> for Fixed<N> {
+    #[inline]
+    fn identity(self) -> Self {
+        self
+    }
+}
 
 /// The sum of two dimensions.
 #[derive(Clone, Copy, Debug, Eq)]
-pub struct Plus<A: Dim, B: Dim>(pub A, pub B);
+pub struct Plus<A: Dim, B: Dim> {
+    val: usize,
+    _a: PhantomData<A>,
+    _b: PhantomData<B>,
+}
+
+impl<A: Dim, B: Dim> Plus<A, B> {
+    #[inline]
+    pub fn new(a: A, b: B) -> Self {
+        Self {
+            val: a.dim() + b.dim(),
+            _a: PhantomData,
+            _b: PhantomData,
+        }
+    }
+}
 
 impl<A: Dim, B: Dim> Dim for Plus<A, B> {
     #[inline]
     fn dim(&self) -> usize {
-        self.0.dim() + self.1.dim()
+        self.val
     }
 }
 
 impl<A: Dim, B: Dim, C: Dim> PartialEq<C> for Plus<A, B> {
     #[inline]
     fn eq(&self, rhs: &C) -> bool {
-        self.dim() == rhs.dim()
+        self.val == rhs.dim()
     }
 }
 
-impl<A: Dim, B: Dim> Identity<Plus<B, A>> for Plus<A, B> {}
+impl<A: Dim, B: Dim> Identity<Plus<B, A>> for Plus<A, B> {
+    #[inline]
+    fn identity(self) -> Plus<B, A> {
+        Plus {
+            val: self.val,
+            _a: PhantomData,
+            _b: PhantomData,
+        }
+    }
+}
 
 macro_rules! impl_add {
     ($sum: literal;; $sub: expr) => {
@@ -152,7 +184,12 @@ macro_rules! dim {
                 }
             }
 
-            impl $crate::dim::Identity<$var> for $var {}
+            impl $crate::dim::Identity<$var> for $var {
+                #[inline]
+                fn identity(self) -> Self {
+                    self
+                }
+            }
 
             use $crate::Dim as _;
             impl<B: $crate::Dim> std::cmp::PartialEq<B> for $var {
@@ -172,14 +209,14 @@ macro_rules! dim {
                 type Output = $crate::dim::Plus<Self, B>;
                 #[inline]
                 fn add(self, rhs: B) -> Self::Output {
-                    $crate::dim::Plus(self, rhs)
+                    $crate::dim::Plus::new(self, rhs)
                 }
             }
             impl<const N: usize> std::ops::Add<$var> for $crate::dim::Fixed<N> {
                 type Output = $crate::dim::Plus<$crate::dim::Fixed<N>, $var>;
                 #[inline]
                 fn add(self, rhs: $var) -> Self::Output {
-                    $crate::dim::Plus(self, rhs)
+                    $crate::dim::Plus::new(self, rhs)
                 }
             }
         }
