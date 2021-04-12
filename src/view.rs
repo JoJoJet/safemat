@@ -36,7 +36,7 @@ use crate::{dim, dim::Identity, Dim, Matrix};
 /// assert_eq!(v[[1, 1]], 13);
 /// assert_eq!(v[[1, 2]], 14);
 /// ```
-pub trait View<'a, T: 'a, M: Dim, N: Dim>
+pub trait View<'a, T: 'a, M: Dim, N: Dim>: Sized
 where
     Self: Index<usize, Output = T> + Index<[usize; 2], Output = T>,
 {
@@ -46,10 +46,16 @@ where
     type Iter: Iterator<Item = &'a T>;
     fn iter(&self) -> Self::Iter;
 
-    type Transpose: View<'a, T, N, M>;
     /// Gets an interface for accessing a transposed form of this matrix;
     /// does not actually rearrange any data.
-    fn transpose_ref(self) -> Self::Transpose;
+    #[inline]
+    fn transpose_ref(self) -> Transpose<M, N, Self> {
+        Transpose {
+            m: self.m(),
+            _n: self.n(),
+            view: self,
+        }
+    }
 }
 
 /// A view into a matrix; a reference to a matrix.
@@ -92,11 +98,6 @@ impl<'a, T: 'a, Ms: Dim, Ns: Dim, Mo: Dim, No: Dim> View<'a, T, Ms, Ns>
             i_iter: 0,
             j_iter: 0,
         }
-    }
-
-    type Transpose = Transpose<'a, T, Ms, Ns, Mo, No>;
-    fn transpose_ref(self) -> Self::Transpose {
-        Transpose { view: self }
     }
 }
 
@@ -162,59 +163,52 @@ where
 /// assert_eq!(t[[2,0]], 3);
 /// assert_eq!(t[[3,0]], 4);
 /// ```
-pub struct Transpose<'a, T, Ms, Ns, Mo, No> {
-    view: MatrixView<'a, T, Ms, Ns, Mo, No>,
+pub struct Transpose<M, N, V> {
+    view: V,
+    m: M,
+    _n: N,
 }
 
-impl<'a, T, Ms, Ns, Mo, No> View<'a, T, Ns, Ms> for Transpose<'a, T, Ms, Ns, Mo, No>
+impl<'a, T, M, N, V> View<'a, T, N, M> for Transpose<M, N, V>
 where
-    Ms: Dim,
-    Ns: Dim,
-    Mo: Dim,
-    No: Dim,
+    T: 'a,
+    M: Dim,
+    N: Dim,
+    V: View<'a, T, M, N>,
 {
     #[inline]
-    fn m(&self) -> Ns {
-        self.view.n.identity()
+    fn m(&self) -> N {
+        self.view.n()
     }
     #[inline]
-    fn n(&self) -> Ms {
-        self.view.m.identity()
+    fn n(&self) -> M {
+        self.view.m()
     }
 
-    type Iter = crate::iter::MatrixViewIter<'a, T, Ms, Ns, Mo, No>;
+    type Iter = V::Iter;
     #[inline]
     fn iter(&self) -> Self::Iter {
         self.view.iter()
     }
-
-    type Transpose = MatrixView<'a, T, Ms, Ns, Mo, No>;
-    fn transpose_ref(self) -> Self::Transpose {
-        self.view
-    }
 }
 
-impl<'a, T, Ms, Ns, Mo, No> Index<usize> for Transpose<'a, T, Ms, Ns, Mo, No>
+impl<T, M, N, V: Index<usize>> Index<usize> for Transpose<M, N, V>
 where
-    Ms: Dim,
-    Ns: Dim,
-    Mo: Dim,
-    No: Dim,
+    M: Dim,
+    N: Dim,
+    V: Index<[usize; 2], Output = T>,
 {
     type Output = T;
     #[inline]
     fn index(&self, idx: usize) -> &T {
-        let i = idx / self.view.m.dim();
-        let j = idx % self.view.m.dim();
+        let i = idx / self.m.dim();
+        let j = idx % self.m.dim();
         &self.view[[j, i]]
     }
 }
-impl<'a, T, Ms, Ns, Mo, No> Index<[usize; 2]> for Transpose<'a, T, Ms, Ns, Mo, No>
+impl<T, M, N, V> Index<[usize; 2]> for Transpose<M, N, V>
 where
-    Ms: Dim,
-    Ns: Dim,
-    Mo: Dim,
-    No: Dim,
+    V: Index<[usize; 2], Output = T>,
 {
     type Output = T;
     #[inline]
@@ -223,9 +217,7 @@ where
     }
 }
 
-impl<'a, T, M: Dim, N: Dim, M2: Identity<M>, N2: Identity<N>> View<'a, T, M, N>
-    for &'a Matrix<T, M2, N2>
-{
+impl<'a, T, M: Dim, N: Dim> View<'a, T, M, N> for &'a Matrix<T, M, N> {
     #[inline]
     fn m(&self) -> M {
         self.m.identity()
@@ -235,16 +227,10 @@ impl<'a, T, M: Dim, N: Dim, M2: Identity<M>, N2: Identity<N>> View<'a, T, M, N>
         self.n.identity()
     }
 
-    type Iter = crate::iter::Iter<'a, T, M2, N2>;
+    type Iter = crate::iter::Iter<'a, T, M, N>;
     #[inline]
     fn iter(&self) -> Self::Iter {
         Matrix::iter(self)
-    }
-
-    type Transpose = Transpose<'a, T, M, N, M2, N2>;
-    #[inline]
-    fn transpose_ref(self) -> Self::Transpose {
-        self.as_view().transpose_ref()
     }
 }
 
@@ -272,9 +258,7 @@ where
     }
 }
 
-impl<'a, T, M: Dim, N: Dim, M2: Identity<M>, N2: Identity<N>> IntoView<'a, T, M, N>
-    for &'a Matrix<T, M2, N2>
-{
+impl<'a, T, M: Dim, N: Dim> IntoView<'a, T, M, N> for &'a Matrix<T, M, N> {
     type View = Self;
     #[inline]
     fn into_view(self) -> Self::View {
