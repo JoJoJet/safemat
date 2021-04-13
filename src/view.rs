@@ -2,40 +2,8 @@ use std::ops::Index;
 
 use crate::{dim, Dim, Matrix};
 
-/// A view into (2D slice of) a matrix. Or, a reference to a matrix.
+/// A view into (slice of) a matrix. Or, a reference to a matrix.
 /// # Examples
-/// Views support linear indexing.
-/// ```
-/// # use safemat::*;
-/// let m = Matrix::from_array([
-///     [1,  2,  3,  4 ],
-///     [5,  6,  7,  8 ],
-///     [9,  10, 11, 12],
-///     [13, 14, 15, 16]
-/// ]);
-/// let v = m.view(1, 1, dim!(2), dim!(2));
-/// assert_eq!(v[0], 6);
-/// assert_eq!(v[1], 7);
-/// assert_eq!(v[2], 10);
-/// assert_eq!(v[3], 11);
-/// ```
-///
-/// As well as square indexing.
-/// ```
-/// # use safemat::*;
-/// let m = Matrix::from_array([
-///     [1,  2,  3,  4,  5 ],
-///     [6,  7,  8,  9,  10],
-///     [11, 12, 13, 14, 15]
-/// ]);
-/// let v = m.view(1, 1, dim!(2), dim!(3));
-/// assert_eq!(v[[0, 0]], 7);
-/// assert_eq!(v[[0, 1]], 8);
-/// assert_eq!(v[[0, 2]], 9);
-/// assert_eq!(v[[1, 0]], 12);
-/// assert_eq!(v[[1, 1]], 13);
-/// assert_eq!(v[[1, 2]], 14);
-/// ```
 pub trait View<'a, T: 'a, M: Dim, N: Dim>: Sized
 where
     Self: Index<usize, Output = T> + Index<[usize; 2], Output = T>,
@@ -46,6 +14,53 @@ where
     type Iter: Iterator<Item = &'a T>;
     fn iter(&self) -> Self::Iter;
 
+    /// Checks if the two views are equal to one another.
+    /// # Examples
+    /// ```
+    /// # use safemat::prelude::*;
+    /// let m = Matrix::from_array([
+    ///     [1, 2, 3],
+    ///     [2, 3, 4],
+    ///     [3, 4, 5]
+    /// ]);
+    /// let a = m.row_at(1);
+    /// let b = m.col_at(1);
+    /// assert!(a.equal(b.transpose_ref()));
+    /// ```
+    fn equal<'b, U: 'b, M2: Dim, N2: Dim>(&self, rhs: impl View<'b, U, M2, N2>) -> bool
+    where
+        T: PartialEq<U>,
+        M: PartialEq<M2>,
+        N: PartialEq<N2>,
+    {
+        if self.m() != rhs.m() || self.n() != rhs.n() {
+            return false;
+        }
+        self.iter().zip(rhs.iter()).all(|(a, b)| a == b)
+    }
+
+    /// Clones each entry in this view into a new owned [`Matrix`].
+    /// ```
+    /// # use safemat::{*, view::View};
+    /// let a = Matrix::from_array([
+    ///     [1, 2,  3,  4 ],
+    ///     [5, 6,  7,  8 ],
+    ///     [9, 10, 11, 12]
+    /// ]);
+    ///
+    /// let b = a.row_at(1).to_matrix();
+    /// assert_eq!(b, mat![5, 6, 7, 8]);
+    ///
+    /// let c = a.col_at(2).to_matrix();
+    /// assert_eq!(c, mat![3; 7; 11]);
+    /// ```
+    fn to_matrix(&self) -> Matrix<T, M, N>
+    where
+        T: Clone,
+    {
+        Matrix::try_from_iter_with_dim(self.m(), self.n(), self.iter().cloned()).unwrap()
+    }
+
     /// Gets an interface for accessing a transposed form of this matrix;
     /// does not actually rearrange any data.
     #[inline]
@@ -55,94 +70,6 @@ where
             _n: self.n(),
             view: self,
         }
-    }
-}
-
-/// A view into a matrix; a reference to a matrix.
-///
-/// # Type parameters:
-/// `Ms`, `Ns`, the dimensions of this view.
-///
-/// `Mo`, `No`, the dimensions of the original matrix.
-///
-/// For examples, see [`View`].
-#[derive(Debug)]
-pub struct MatrixView<'mat, T, Ms, Ns, Mo, No> {
-    mat: &'mat Matrix<T, Mo, No>,
-    m: Ms,
-    n: Ns,
-    i: usize,
-    j: usize,
-}
-
-use crate::iter::MatrixViewIter;
-impl<'a, T: 'a, Ms: Dim, Ns: Dim, Mo: Dim, No: Dim> View<'a, T, Ms, Ns>
-    for MatrixView<'a, T, Ms, Ns, Mo, No>
-{
-    #[inline]
-    fn m(&self) -> Ms {
-        self.m
-    }
-    #[inline]
-    fn n(&self) -> Ns {
-        self.n
-    }
-    type Iter = MatrixViewIter<'a, T, Ms, Ns, Mo, No>;
-    fn iter(&self) -> Self::Iter {
-        MatrixViewIter {
-            mat: self.mat,
-            m: self.m,
-            n: self.n,
-            i: self.i,
-            j: self.j,
-            i_iter: 0,
-            j_iter: 0,
-        }
-    }
-}
-
-impl<T, Ms: Dim, Ns: Dim, Mo: Dim, No: Dim> Index<usize> for MatrixView<'_, T, Ms, Ns, Mo, No> {
-    type Output = T;
-    #[inline]
-    fn index(&self, idx: usize) -> &Self::Output {
-        assert!(idx < self.m.dim() * self.n.dim());
-        let i = self.i + idx / self.n.dim();
-        let j = self.j + idx % self.n.dim();
-        debug_assert!(i < self.mat.m.dim());
-        debug_assert!(j < self.mat.n.dim());
-        &self.mat.items[i * self.mat.n.dim() + j]
-    }
-}
-
-impl<T, Ms: Dim, Ns: Dim, Mo: Dim, No: Dim> Index<[usize; 2]>
-    for MatrixView<'_, T, Ms, Ns, Mo, No>
-{
-    type Output = T;
-    #[inline]
-    fn index(&self, [i, j]: [usize; 2]) -> &Self::Output {
-        assert!(i < self.m.dim());
-        assert!(j < self.n.dim());
-        let i = self.i + i;
-        let j = self.j + j;
-        debug_assert!(i < self.mat.m.dim());
-        debug_assert!(j < self.mat.n.dim());
-        &self.mat.items[i * self.mat.n.dim() + j]
-    }
-}
-
-impl<'a, T, Ms, Ns, Mo, No, Rhs> PartialEq<Rhs> for MatrixView<'a, T, Ms, Ns, Mo, No>
-where
-    T: PartialEq,
-    Ms: Dim,
-    Ns: Dim,
-    Mo: Dim,
-    No: Dim,
-    Rhs: IntoView<'a, T, Ms, Ns> + Clone,
-{
-    fn eq(&self, rhs: &Rhs) -> bool {
-        self.iter()
-            .zip(rhs.clone().into_view().iter())
-            .all(|(a, b)| a == b)
     }
 }
 
@@ -245,23 +172,13 @@ pub trait IntoView<'a, T: 'a, M: Dim, N: Dim>: Sized + 'a {
     fn into_view(self) -> Self::View;
 }
 
-impl<'a, T, M, N, Mo, No> IntoView<'a, T, M, N> for MatrixView<'a, T, M, N, Mo, No>
+impl<'a, T: 'a, M: Dim, N: Dim, V> IntoView<'a, T, M, N> for V
 where
-    M: Dim,
-    N: Dim,
-    Mo: Dim,
-    No: Dim,
+    V: View<'a, T, M, N> + 'a,
 {
     type View = Self;
-    fn into_view(self) -> Self {
-        self
-    }
-}
-
-impl<'a, T, M: Dim, N: Dim> IntoView<'a, T, M, N> for &'a Matrix<T, M, N> {
-    type View = Self;
     #[inline]
-    fn into_view(self) -> Self::View {
+    fn into_view(self) -> Self {
         self
     }
 }
@@ -270,77 +187,206 @@ pub trait RowView<'a, T: 'a, N: Dim>: View<'a, T, dim!(1), N> {}
 
 impl<'a, T: 'a, N: Dim, V> RowView<'a, T, N> for V where V: View<'a, T, dim!(1), N> {}
 
-pub type RowViewImpl<'a, T, Ns, Mo, No> = MatrixView<'a, T, dim!(1), Ns, Mo, No>;
-
 pub trait IntoRowView<'a, T: 'a, N: Dim>: IntoView<'a, T, dim!(1), N> {}
 
 impl<'a, T: 'a, N: Dim, I> IntoRowView<'a, T, N> for I where I: IntoView<'a, T, dim!(1), N> {}
 
-impl<'a, T: 'a, M: Dim, V> ColumnView<'a, T, M> for V where V: View<'a, T, M, dim!(1)> {}
+#[derive(Debug)]
+pub struct RowSlice<'a, T, M, N> {
+    mat: &'a Matrix<T, M, N>,
+    i: usize,
+}
 
-pub type ColumnViewImpl<'a, T, Ms, Mo, No> = MatrixView<'a, T, Ms, dim!(1), Mo, No>;
+impl<T, M, N> Copy for RowSlice<'_, T, M, N> {}
+
+impl<T, M, N> Clone for RowSlice<'_, T, M, N> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            mat: self.mat,
+            i: self.i,
+        }
+    }
+}
+
+impl<'a, T, M: Dim, N: Dim> View<'a, T, dim!(1), N> for RowSlice<'a, T, M, N> {
+    #[inline]
+    fn m(&self) -> dim!(1) {
+        dim!(1)
+    }
+    #[inline]
+    fn n(&self) -> N {
+        self.mat.n
+    }
+
+    type Iter = std::slice::Iter<'a, T>;
+    fn iter(&self) -> Self::Iter {
+        let a = self.i * self.mat.n.dim();
+        let b = a + self.mat.n.dim();
+        self.mat.items[a..b].iter()
+    }
+}
+
+impl<T, M: Dim, N: Dim> Index<usize> for RowSlice<'_, T, M, N> {
+    type Output = T;
+    #[inline]
+    fn index(&self, j: usize) -> &T {
+        &self.mat[[self.i, j]]
+    }
+}
+impl<T, M: Dim, N: Dim> Index<[usize; 2]> for RowSlice<'_, T, M, N> {
+    type Output = T;
+    #[inline]
+    fn index(&self, [i, j]: [usize; 2]) -> &T {
+        assert_eq!(i, 0);
+        &self.mat[[self.i, j]]
+    }
+}
+
+impl<'a, 'b, T, U, M1, M2, N1, N2> PartialEq<RowSlice<'b, U, M2, N2>> for RowSlice<'a, T, M1, N1>
+where
+    T: PartialEq<U>,
+    M1: Dim,
+    M2: Dim,
+    N1: Dim + PartialEq<N2>,
+    N2: Dim,
+{
+    fn eq(&self, rhs: &RowSlice<'b, U, M2, N2>) -> bool {
+        self.equal(*rhs)
+    }
+}
+
+impl<'a, 'b, T, U, M1, M2, N1, N2> PartialEq<&'b Matrix<U, M2, N2>> for RowSlice<'a, T, M1, N1>
+where
+    T: PartialEq<U>,
+    M1: Dim,
+    dim!(1): PartialEq<M2>,
+    M2: Dim,
+    N1: Dim + PartialEq<N2>,
+    N2: Dim,
+{
+    fn eq(&self, &rhs: &&Matrix<U, M2, N2>) -> bool {
+        self.equal(rhs)
+    }
+}
 
 pub trait ColumnView<'a, T: 'a, M: Dim>: View<'a, T, M, dim!(1)> {}
 
+impl<'a, T: 'a, M: Dim, V> ColumnView<'a, T, M> for V where V: View<'a, T, M, dim!(1)> {}
+
+#[derive(Debug)]
+pub struct ColumnSlice<'a, T, M, N> {
+    mat: &'a Matrix<T, M, N>,
+    j: usize,
+}
+
+impl<T, M, N> Copy for ColumnSlice<'_, T, M, N> {}
+
+impl<T, M, N> Clone for ColumnSlice<'_, T, M, N> {
+    fn clone(&self) -> Self {
+        Self {
+            mat: self.mat,
+            j: self.j,
+        }
+    }
+}
+
+impl<'a, T, M: Dim, N: Dim> View<'a, T, M, dim!(1)> for ColumnSlice<'a, T, M, N> {
+    #[inline]
+    fn m(&self) -> M {
+        self.mat.m
+    }
+    #[inline]
+    fn n(&self) -> dim!(1) {
+        dim!(1)
+    }
+
+    type Iter = ColumnSliceIter<'a, T, M, N>;
+    fn iter(&self) -> Self::Iter {
+        ColumnSliceIter {
+            mat: self.mat,
+            j: self.j,
+            i: 0,
+        }
+    }
+}
+
+impl<T, M: Dim, N: Dim> Index<usize> for ColumnSlice<'_, T, M, N> {
+    type Output = T;
+    #[inline]
+    fn index(&self, i: usize) -> &T {
+        &self.mat[[i, self.j]]
+    }
+}
+
+impl<T, M: Dim, N: Dim> Index<[usize; 2]> for ColumnSlice<'_, T, M, N> {
+    type Output = T;
+    #[inline]
+    fn index(&self, [i, j]: [usize; 2]) -> &T {
+        assert_eq!(j, 0);
+        &self.mat[[i, self.j]]
+    }
+}
+
+impl<'a, 'b, T, U, M1, M2, N1, N2> PartialEq<&'b Matrix<U, M2, N2>> for ColumnSlice<'a, T, M1, N1>
+where
+    T: PartialEq<U>,
+    M1: Dim + PartialEq<M2>,
+    M2: Dim,
+    N1: Dim,
+    N2: Dim,
+    dim!(1): PartialEq<N2>,
+{
+    fn eq(&self, &rhs: &&Matrix<U, M2, N2>) -> bool {
+        self.equal(rhs)
+    }
+}
+
+pub struct ColumnSliceIter<'a, T, M, N> {
+    mat: &'a Matrix<T, M, N>,
+    j: usize,
+    i: usize,
+}
+
+impl<'a, T, M: Dim, N: Dim> Iterator for ColumnSliceIter<'a, T, M, N> {
+    type Item = &'a T;
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let i = self.i;
+        if i < self.mat.m.dim() {
+            self.i += 1;
+            Some(&self.mat.items[i * self.mat.n.dim() + self.j])
+        } else {
+            None
+        }
+    }
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+}
+
+impl<T, M: Dim, N: Dim> ExactSizeIterator for ColumnSliceIter<'_, T, M, N> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.mat.m.dim() - self.i
+    }
+}
+
 impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
-    /// Gets a view into this matrix.
-    /// # Parameters
-    /// `i`: the vertical index at which to start the view.
-    ///
-    /// `j`: the horizontal index at which to start the view.
-    ///
-    /// `len_m`: the vertical length of the view.
-    ///
-    /// `len_n`: the horizontal length of the view.
     #[inline]
-    pub fn view<Ms: Dim, Ns: Dim>(
-        &self,
-        i: usize,
-        j: usize,
-        len_m: Ms,
-        len_n: Ns,
-    ) -> MatrixView<'_, T, Ms, Ns, M, N> {
-        assert!(i + len_m.dim() <= self.m.dim());
-        assert!(j + len_n.dim() <= self.n.dim());
-        MatrixView {
-            mat: self,
-            m: len_m,
-            n: len_n,
-            i,
-            j,
-        }
+    pub fn as_view(&self) -> &Self {
+        self
     }
 
-    #[inline]
-    pub fn as_view(&self) -> MatrixView<'_, T, M, N, M, N> {
-        MatrixView {
-            mat: self,
-            m: self.m,
-            n: self.n,
-            i: 0,
-            j: 0,
-        }
-    }
-
-    pub fn row_at(&self, i: usize) -> RowViewImpl<'_, T, N, M, N> {
+    pub fn row_at(&self, i: usize) -> RowSlice<'_, T, M, N> {
         assert!(i < self.m.dim());
-        MatrixView {
-            mat: self,
-            m: dim!(1),
-            n: self.n,
-            i,
-            j: 0,
-        }
+        RowSlice { mat: self, i }
     }
 
-    pub fn col_at(&self, j: usize) -> ColumnViewImpl<'_, T, M, M, N> {
+    pub fn col_at(&self, j: usize) -> ColumnSlice<'_, T, M, N> {
         assert!(j < self.n.dim());
-        MatrixView {
-            mat: self,
-            m: self.m,
-            n: dim!(1),
-            i: 0,
-            j,
-        }
+        ColumnSlice { mat: self, j }
     }
 }
