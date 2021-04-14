@@ -1,10 +1,21 @@
 use super::*;
 use crate::view::*;
 
-use std::{
-    iter::{Enumerate, FusedIterator},
-    marker::PhantomData,
-};
+use std::{iter::FusedIterator, marker::PhantomData};
+
+/// A matrix iterator that internally tracks its indices.
+/// You should be able to access these with an inherent `indices` method.
+#[doc(hidden)]
+pub trait IndexIterator: Iterator {
+    /// Retrives the indices corresponding to the next item
+    /// yielded from this iterator.
+    /// If the next item yielded will be `None`, this can return a garbage value.
+    fn get_indices(&self) -> (usize, usize);
+
+    fn get_indices_back(&self) -> (usize, usize)
+    where
+        Self: DoubleEndedIterator;
+}
 
 /// An iterator over a matrix that yields the indices of the current element.
 /// ```
@@ -17,45 +28,48 @@ use std::{
 /// assert_eq!(i.next(), Some((1, 1, &4)));
 /// assert_eq!(i.next(), None);
 /// ```
-pub struct Indices<I: Iterator, M: Dim, N: Dim> {
-    _m: PhantomData<M>,
-    n: N,
-    iter: Enumerate<I>,
-}
+pub struct Indices<I: IndexIterator>(pub(crate) I);
 
-impl<I: Iterator, M: Dim, N: Dim> Iterator for Indices<I, M, N> {
+impl<I: IndexIterator> Iterator for Indices<I> {
     type Item = (usize, usize, I::Item);
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let (idx, itm) = self.iter.next()?;
-        let n = self.n.dim();
-        Some((idx / n, idx % n, itm))
+        let (i, j) = self.0.get_indices();
+        Some((i, j, self.0.next()?))
     }
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
+        self.0.size_hint()
     }
 }
-impl<I, M: Dim, N: Dim> DoubleEndedIterator for Indices<I, M, N>
+impl<I> DoubleEndedIterator for Indices<I>
 where
-    I: DoubleEndedIterator + ExactSizeIterator,
+    I: IndexIterator + DoubleEndedIterator,
 {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        let (idx, itm) = self.iter.next_back()?;
-        let n = self.n.dim();
-        Some((idx / n, idx % n, itm))
+        let (i, j) = self.0.get_indices_back();
+        Some((i, j, self.0.next_back()?))
     }
 }
 
-impl<I: ExactSizeIterator, M: Dim, N: Dim> ExactSizeIterator for Indices<I, M, N> {
+impl<I> ExactSizeIterator for Indices<I>
+where
+    I: IndexIterator + ExactSizeIterator,
+{
     #[inline]
     fn len(&self) -> usize {
-        self.iter.len()
+        self.0.len()
     }
 }
 
-impl<I: FusedIterator, M: Dim, N: Dim> FusedIterator for Indices<I, M, N> {}
+impl<I: IndexIterator + FusedIterator> FusedIterator for Indices<I> {}
+
+/// Projects a linear index into a pair of 2D indices.
+#[inline]
+fn project2(n: impl Dim, idx: usize) -> (usize, usize) {
+    (idx / n.dim(), idx % n.dim())
+}
 
 /// An iterator that moves out of a matrix.
 /// ```
@@ -69,17 +83,25 @@ impl<I: FusedIterator, M: Dim, N: Dim> FusedIterator for Indices<I, M, N> {}
 pub struct IntoIter<T, M: Dim, N: Dim> {
     _m: PhantomData<M>,
     n: N,
-    iter: Enumerate<std::vec::IntoIter<T>>,
+    iter: std::vec::IntoIter<T>,
+    count: usize,
 }
 
 impl<T, M: Dim, N: Dim> IntoIter<T, M, N> {
     #[inline]
-    pub fn indices(self) -> Indices<impl Iterator<Item = T>, M, N> {
-        Indices {
-            _m: PhantomData,
-            n: self.n,
-            iter: self.iter,
-        }
+    pub fn indices(self) -> Indices<Self> {
+        Indices(self)
+    }
+}
+
+impl<T, M: Dim, N: Dim> IndexIterator for IntoIter<T, M, N> {
+    #[inline]
+    fn get_indices(&self) -> (usize, usize) {
+        project2(self.n, self.count)
+    }
+    #[inline]
+    fn get_indices_back(&self) -> (usize, usize) {
+        project2(self.n, self.iter.len() + self.count)
     }
 }
 
@@ -87,7 +109,8 @@ impl<T, M: Dim, N: Dim> Iterator for IntoIter<T, M, N> {
     type Item = T;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(_, itm)| itm)
+        self.count += 1;
+        self.iter.next()
     }
 
     #[inline]
@@ -99,7 +122,7 @@ impl<T, M: Dim, N: Dim> Iterator for IntoIter<T, M, N> {
 impl<T, M: Dim, N: Dim> DoubleEndedIterator for IntoIter<T, M, N> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.iter.next_back().map(|(_, itm)| itm)
+        self.iter.next_back()
     }
 }
 
@@ -120,17 +143,25 @@ impl<T, M: Dim, N: Dim> ExactSizeIterator for IntoIter<T, M, N> {}
 pub struct Iter<'a, T, M: Dim, N: Dim> {
     _m: PhantomData<M>,
     n: N,
-    iter: Enumerate<std::slice::Iter<'a, T>>,
+    iter: std::slice::Iter<'a, T>,
+    count: usize,
 }
 
 impl<'a, T, M: Dim, N: Dim> Iter<'a, T, M, N> {
     #[inline]
-    pub fn indices(self) -> Indices<impl Iterator<Item = &'a T>, M, N> {
-        Indices {
-            _m: PhantomData,
-            n: self.n,
-            iter: self.iter,
-        }
+    pub fn indices(self) -> Indices<Self> {
+        Indices(self)
+    }
+}
+
+impl<T, M: Dim, N: Dim> IndexIterator for Iter<'_, T, M, N> {
+    #[inline]
+    fn get_indices(&self) -> (usize, usize) {
+        project2(self.n, self.count)
+    }
+    #[inline]
+    fn get_indices_back(&self) -> (usize, usize) {
+        project2(self.n, self.iter.len() + self.count)
     }
 }
 
@@ -138,7 +169,8 @@ impl<'a, T, M: Dim, N: Dim> Iterator for Iter<'a, T, M, N> {
     type Item = &'a T;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(_, itm)| itm)
+        self.count += 1;
+        self.iter.next()
     }
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -149,7 +181,7 @@ impl<'a, T, M: Dim, N: Dim> Iterator for Iter<'a, T, M, N> {
 impl<T, M: Dim, N: Dim> DoubleEndedIterator for Iter<'_, T, M, N> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.iter.next_back().map(|(_, itm)| itm)
+        self.iter.next_back()
     }
 }
 
@@ -175,17 +207,25 @@ impl<T, M: Dim, N: Dim> ExactSizeIterator for Iter<'_, T, M, N> {}
 pub struct IterMut<'a, T, M: Dim, N: Dim> {
     _m: PhantomData<M>,
     n: N,
-    iter: Enumerate<std::slice::IterMut<'a, T>>,
+    iter: std::slice::IterMut<'a, T>,
+    count: usize,
 }
 
 impl<'a, T, M: Dim, N: Dim> IterMut<'a, T, M, N> {
     #[inline]
-    pub fn indices(self) -> Indices<impl Iterator<Item = &'a mut T>, M, N> {
-        Indices {
-            _m: PhantomData,
-            n: self.n,
-            iter: self.iter,
-        }
+    pub fn indices(self) -> Indices<Self> {
+        Indices(self)
+    }
+}
+
+impl<T, M: Dim, N: Dim> IndexIterator for IterMut<'_, T, M, N> {
+    #[inline]
+    fn get_indices(&self) -> (usize, usize) {
+        project2(self.n, self.count)
+    }
+    #[inline]
+    fn get_indices_back(&self) -> (usize, usize) {
+        project2(self.n, self.iter.len() + self.count)
     }
 }
 
@@ -193,7 +233,8 @@ impl<'a, T, M: Dim, N: Dim> Iterator for IterMut<'a, T, M, N> {
     type Item = &'a mut T;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(_, itm)| itm)
+        self.count += 1;
+        self.iter.next()
     }
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -204,7 +245,7 @@ impl<'a, T, M: Dim, N: Dim> Iterator for IterMut<'a, T, M, N> {
 impl<T, M: Dim, N: Dim> DoubleEndedIterator for IterMut<'_, T, M, N> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.iter.next_back().map(|(_, itm)| itm)
+        self.iter.next_back()
     }
 }
 
@@ -391,7 +432,8 @@ impl<T, M: Dim, N: Dim> IntoIterator for Matrix<T, M, N> {
         IntoIter {
             _m: PhantomData,
             n: self.n,
-            iter: Vec::from(self.items).into_iter().enumerate(),
+            iter: Vec::from(self.items).into_iter(),
+            count: 0,
         }
     }
 }
@@ -404,7 +446,8 @@ impl<'a, T, M: Dim, N: Dim> IntoIterator for &'a Matrix<T, M, N> {
         Iter {
             _m: PhantomData,
             n: self.n,
-            iter: self.items.iter().enumerate(),
+            iter: self.items.iter(),
+            count: 0,
         }
     }
 }
@@ -417,7 +460,8 @@ impl<'a, T, M: Dim, N: Dim> IntoIterator for &'a mut Matrix<T, M, N> {
         IterMut {
             _m: PhantomData,
             n: self.n,
-            iter: self.items.iter_mut().enumerate(),
+            iter: self.items.iter_mut(),
+            count: 0,
         }
     }
 }

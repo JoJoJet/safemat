@@ -84,6 +84,23 @@ where
     /// let b = a.as_view().transpose_ref().to_matrix();
     /// assert_eq!(b, mat![1, 4 ; 2, 5 ; 3, 6]);
     /// ```
+    /// It also supports iteration that yields indices.
+    /// ```
+    /// # use safemat::prelude::*;
+    /// let a = Matrix::from_array([
+    ///     [1, 2, 3],
+    ///     [4, 5, 6],
+    /// ]);
+    /// let b = a.as_view().transpose_ref();
+    /// let mut i = b.iter().indices();
+    /// assert_eq!(i.next(), Some((0, 0, &1)));
+    /// assert_eq!(i.next(), Some((0, 1, &4)));
+    /// assert_eq!(i.next(), Some((1, 0, &2)));
+    /// // etc...
+    /// # assert_eq!(i.next(), Some((1, 1, &5)));
+    /// # assert_eq!(i.next(), Some((2, 0, &3)));
+    /// # assert_eq!(i.next(), Some((2, 1, &6)));
+    /// ```
     #[inline]
     fn transpose_ref(self) -> Transpose<'a, Self> {
         Transpose {
@@ -98,17 +115,30 @@ where
 /// # use safemat::prelude::*;
 /// let a = Matrix::from_array([
 ///     [1, 2, 3, 4],
-///     [5, 6, 6, 7],
+///     [5, 6, 7, 8],
 /// ]);
 /// let t = a.as_view().transpose_ref();
+/// // linear indexing:
 /// assert_eq!(t[0], 1);
 /// assert_eq!(t[1], 5);
 /// assert_eq!(t[2], 2);
+/// // etc...
+/// # assert_eq!(t[3], 6);
+/// # assert_eq!(t[4], 3);
+/// # assert_eq!(t[5], 7);
+/// # assert_eq!(t[6], 4);
+/// # assert_eq!(t[7], 8);
 ///
+/// // square indexing:
 /// assert_eq!(t[[0,0]], 1);
 /// assert_eq!(t[[1,0]], 2);
 /// assert_eq!(t[[2,0]], 3);
-/// assert_eq!(t[[3,0]], 4);
+/// // etc...
+/// # assert_eq!(t[[3,0]], 4);
+/// # assert_eq!(t[[0,1]], 5);
+/// # assert_eq!(t[[1,1]], 6);
+/// # assert_eq!(t[[2,1]], 7);
+/// # assert_eq!(t[[3,1]], 8);
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct Transpose<'a, V: 'a> {
@@ -181,6 +211,13 @@ pub struct TransposeIter<'a, V> {
     j: usize,
 }
 
+impl<'a, V: View<'a>> TransposeIter<'a, V> {
+    #[inline]
+    pub fn indices(self) -> crate::iter::Indices<Self> {
+        crate::iter::Indices(self)
+    }
+}
+
 impl<'a, V> Iterator for TransposeIter<'a, V>
 where
     V: View<'a>,
@@ -205,6 +242,19 @@ where
     fn size_hint(&self) -> (usize, Option<usize>) {
         let len = self.len();
         (len, Some(len))
+    }
+}
+
+impl<'a, V: View<'a>> crate::iter::IndexIterator for TransposeIter<'a, V> {
+    fn get_indices(&self) -> (usize, usize) {
+        (self.j, self.i)
+    }
+
+    fn get_indices_back(&self) -> (usize, usize)
+    where
+        Self: DoubleEndedIterator,
+    {
+        unimplemented!() // we don't support this 'round these parts
     }
 }
 
