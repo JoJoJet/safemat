@@ -44,12 +44,18 @@ where
 }
 impl<T: Eq, M: Dim + Eq, N: Dim + Eq> Eq for Matrix<T, M, N> {}
 
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
-#[error("not enough items to fill a {m}x{n} matrix; iterator only contained {num}")]
+#[derive(thiserror::Error, PartialEq, Eq)]
+#[error("not enough items to fill a {m}x{n} matrix; iterator only contained {num} items")]
 pub struct FromIterError {
     m: usize,
     n: usize,
     num: usize,
+}
+
+impl std::fmt::Debug for FromIterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt(self, f)
+    }
 }
 
 impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
@@ -123,6 +129,15 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
             n,
             items: items.into_boxed_slice(),
         })
+    }
+
+    #[inline]
+    pub fn get(&self, i: usize, j: usize) -> Option<&T> {
+        if i < self.m.dim() && j < self.n.dim() {
+            Some(&self.items[i * self.n.dim() + j])
+        } else {
+            None
+        }
     }
 }
 

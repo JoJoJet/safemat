@@ -1,4 +1,4 @@
-use std::ops::Index;
+use std::{marker::PhantomData, ops::Index};
 
 use crate::{dim, Dim, Matrix};
 
@@ -20,6 +20,10 @@ where
 
     type Iter: Iterator<Item = &'a Self::Entry>;
     fn iter(&self) -> Self::Iter;
+
+    /// Gets the entry at specified indices,
+    /// or returns nothing if the index is invalid.
+    fn get(&self, i: usize, j: usize) -> Option<&'a Self::Entry>;
 
     /// Checks if the two views are equal to one another.
     /// # Examples
@@ -48,6 +52,8 @@ where
     }
 
     /// Clones each entry in this view into a new owned [`Matrix`].
+    /// # Examples
+    /// Row/column slices.
     /// ```
     /// # use safemat::{*, view::View};
     /// let a = Matrix::from_array([
@@ -71,12 +77,18 @@ where
 
     /// Gets an interface for accessing a transposed form of this matrix;
     /// does not actually rearrange any data.
+    /// # Examples
+    /// ```
+    /// # use safemat::prelude::*;
+    /// let a = mat![1, 2, 3 ; 4, 5, 6];
+    /// let b = a.as_view().transpose_ref().to_matrix();
+    /// assert_eq!(b, mat![1, 4 ; 2, 5 ; 3, 6]);
+    /// ```
     #[inline]
-    fn transpose_ref(self) -> Transpose<Self::M, Self::N, Self> {
+    fn transpose_ref(self) -> Transpose<'a, Self> {
         Transpose {
-            m: self.m(),
-            _n: self.n(),
             view: self,
+            _p: PhantomData,
         }
     }
 }
@@ -99,13 +111,12 @@ where
 /// assert_eq!(t[[3,0]], 4);
 /// ```
 #[derive(Debug, Clone, Copy)]
-pub struct Transpose<M, N, V> {
+pub struct Transpose<'a, V: 'a> {
     view: V,
-    m: M,
-    _n: N,
+    _p: PhantomData<&'a V>,
 }
 
-impl<'a, V> View<'a> for Transpose<V::M, V::N, V>
+impl<'a, V> View<'a> for Transpose<'a, V>
 where
     V: View<'a>,
 {
@@ -122,35 +133,89 @@ where
         self.view.m()
     }
 
-    type Iter = V::Iter;
+    #[inline]
+    fn get(&self, i: usize, j: usize) -> Option<&'a Self::Entry> {
+        self.view.get(j, i)
+    }
+
+    type Iter = TransposeIter<'a, V>;
     #[inline]
     fn iter(&self) -> Self::Iter {
-        self.view.iter()
+        TransposeIter {
+            view: self.view,
+            i: 0,
+            j: 0,
+            _p: PhantomData,
+        }
     }
 }
 
-impl<T, M, N, V: Index<usize>> Index<usize> for Transpose<M, N, V>
+impl<'a, V> Index<usize> for Transpose<'a, V>
 where
-    M: Dim,
-    N: Dim,
-    V: Index<[usize; 2], Output = T>,
+    V: View<'a>,
 {
-    type Output = T;
+    type Output = V::Entry;
     #[inline]
-    fn index(&self, idx: usize) -> &T {
-        let i = idx / self.m.dim();
-        let j = idx % self.m.dim();
+    fn index(&self, idx: usize) -> &Self::Output {
+        let i = idx / self.view.m().dim();
+        let j = idx % self.view.m().dim();
         &self.view[[j, i]]
     }
 }
-impl<T, M, N, V> Index<[usize; 2]> for Transpose<M, N, V>
+impl<'a, V> Index<[usize; 2]> for Transpose<'a, V>
 where
-    V: Index<[usize; 2], Output = T>,
+    V: View<'a>,
 {
-    type Output = T;
+    type Output = V::Entry;
     #[inline]
-    fn index(&self, [i, j]: [usize; 2]) -> &T {
+    fn index(&self, [i, j]: [usize; 2]) -> &Self::Output {
         &self.view[[j, i]]
+    }
+}
+
+/// An iterator over the transpose of a [`View`].
+pub struct TransposeIter<'a, V> {
+    view: V,
+    _p: PhantomData<&'a V>,
+    i: usize,
+    j: usize,
+}
+
+impl<'a, V> Iterator for TransposeIter<'a, V>
+where
+    V: View<'a>,
+{
+    type Item = &'a V::Entry;
+    fn next(&mut self) -> Option<Self::Item> {
+        let j = self.j;
+        if j < self.view.n().dim() {
+            let i = self.i;
+            self.i += 1;
+            if self.i == self.view.m().dim() {
+                self.i = 0;
+                self.j += 1;
+            }
+            self.view.get(i, j) // Due to this line, this is NOT a fused iterator.
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+}
+
+impl<'a, V> ExactSizeIterator for TransposeIter<'a, V>
+where
+    V: View<'a>,
+{
+    #[inline]
+    fn len(&self) -> usize {
+        let idx = self.i * self.view.n().dim() + self.j;
+        self.view.m().dim() * self.view.n().dim() - idx
     }
 }
 
@@ -166,6 +231,11 @@ impl<'a, T, M: Dim, N: Dim> View<'a> for &'a Matrix<T, M, N> {
     #[inline]
     fn n(&self) -> N {
         self.n
+    }
+
+    #[inline]
+    fn get(&self, i: usize, j: usize) -> Option<&'a T> {
+        (*self).get(i, j)
     }
 
     type Iter = crate::iter::Iter<'a, T, M, N>;
@@ -240,6 +310,15 @@ impl<'a, T, M: Dim, N: Dim> View<'a> for RowSlice<'a, T, M, N> {
         self.mat.n
     }
 
+    #[inline]
+    fn get(&self, i: usize, j: usize) -> Option<&'a T> {
+        if i == 0 && j < self.n().dim() {
+            Some(&self.mat.items[self.i * self.n().dim() + j])
+        } else {
+            None
+        }
+    }
+
     type Iter = std::slice::Iter<'a, T>;
     fn iter(&self) -> Self::Iter {
         let a = self.i * self.mat.n.dim();
@@ -312,7 +391,17 @@ impl<'a, T, M: Dim, N: Dim> View<'a> for ColumnSlice<'a, T, M, N> {
         dim!(1)
     }
 
+    #[inline]
+    fn get(&self, i: usize, j: usize) -> Option<&'a T> {
+        if j == 0 && i < self.m().dim() {
+            Some(&self.mat.items[i * self.mat.n.dim() + self.j])
+        } else {
+            None
+        }
+    }
+
     type Iter = ColumnSliceIter<'a, T, M, N>;
+    #[inline]
     fn iter(&self) -> Self::Iter {
         ColumnSliceIter {
             mat: self.mat,
