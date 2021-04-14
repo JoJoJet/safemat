@@ -3,8 +3,11 @@ use std::ops::Index;
 use crate::{dim, Dim, Matrix};
 
 /// A view into (slice of) a matrix. Or, a reference to a matrix.
+///
+/// Any view should consist of a refernce to a matrix, and little more.
+/// It must be cheap to copy.
 /// # Examples
-pub trait View<'a>: Sized
+pub trait View<'a>: Sized + Copy
 where
     Self: Index<usize, Output = Self::Entry> + Index<[usize; 2], Output = Self::Entry>,
 {
@@ -59,7 +62,7 @@ where
     /// let c = a.col_at(2).to_matrix();
     /// assert_eq!(c, mat![3; 7; 11]);
     /// ```
-    fn to_matrix(&self) -> Matrix<Self::Entry, Self::M, Self::N>
+    fn to_matrix(self) -> Matrix<Self::Entry, Self::M, Self::N>
     where
         Self::Entry: Clone,
     {
@@ -95,6 +98,7 @@ where
 /// assert_eq!(t[[2,0]], 3);
 /// assert_eq!(t[[3,0]], 4);
 /// ```
+#[derive(Debug, Clone, Copy)]
 pub struct Transpose<M, N, V> {
     view: V,
     m: M,
@@ -260,30 +264,16 @@ impl<T, M: Dim, N: Dim> Index<[usize; 2]> for RowSlice<'_, T, M, N> {
     }
 }
 
-impl<'a, 'b, T, U, M1, M2, N1, N2> PartialEq<RowSlice<'b, U, M2, N2>> for RowSlice<'a, T, M1, N1>
+impl<'a, 'b, T, M: Dim, N: Dim, Rhs> PartialEq<Rhs> for RowSlice<'a, T, M, N>
 where
-    T: PartialEq<U>,
-    M1: Dim,
-    M2: Dim,
-    N1: Dim + PartialEq<N2>,
-    N2: Dim,
+    Rhs: View<'b>,
+    T: PartialEq<Rhs::Entry>,
+    dim!(1): PartialEq<Rhs::M>,
+    N: PartialEq<Rhs::N>,
 {
-    fn eq(&self, rhs: &RowSlice<'b, U, M2, N2>) -> bool {
+    #[inline]
+    fn eq(&self, rhs: &Rhs) -> bool {
         self.equal(*rhs)
-    }
-}
-
-impl<'a, 'b, T, U, M1, M2, N1, N2> PartialEq<&'b Matrix<U, M2, N2>> for RowSlice<'a, T, M1, N1>
-where
-    T: PartialEq<U>,
-    M1: Dim,
-    dim!(1): PartialEq<M2>,
-    M2: Dim,
-    N1: Dim + PartialEq<N2>,
-    N2: Dim,
-{
-    fn eq(&self, &rhs: &&Matrix<U, M2, N2>) -> bool {
-        self.equal(rhs)
     }
 }
 
@@ -349,17 +339,16 @@ impl<T, M: Dim, N: Dim> Index<[usize; 2]> for ColumnSlice<'_, T, M, N> {
     }
 }
 
-impl<'a, 'b, T, U, M1, M2, N1, N2> PartialEq<&'b Matrix<U, M2, N2>> for ColumnSlice<'a, T, M1, N1>
+impl<'a, 'b, T, M: Dim, N: Dim, Rhs> PartialEq<Rhs> for ColumnSlice<'a, T, M, N>
 where
-    T: PartialEq<U>,
-    M1: Dim + PartialEq<M2>,
-    M2: Dim,
-    N1: Dim,
-    N2: Dim,
-    dim!(1): PartialEq<N2>,
+    Rhs: View<'b>,
+    T: PartialEq<Rhs::Entry>,
+    M: PartialEq<Rhs::M>,
+    dim!(1): PartialEq<Rhs::N>,
 {
-    fn eq(&self, &rhs: &&Matrix<U, M2, N2>) -> bool {
-        self.equal(rhs)
+    #[inline]
+    fn eq(&self, rhs: &Rhs) -> bool {
+        self.equal(*rhs)
     }
 }
 
