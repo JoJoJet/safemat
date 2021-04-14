@@ -354,9 +354,10 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     ///     [ 5, 7, 9 ],
     /// ]));
     /// ```
-    pub fn add_row_ref<'a, U: 'a, V>(&'a self, row: impl IntoRowView<'a, U, N>) -> Matrix<V, M, N>
+    pub fn add_row_ref<'a, V, U>(&'a self, row: V) -> Matrix<U, M, N>
     where
-        for<'b> &'a T: Add<&'b U, Output = V>,
+        V: IntoRowView<'a, N>,
+        for<'b> &'a T: Add<&'b V::Entry, Output = U>,
     {
         let row = row.into_view();
         let n = self.n.dim();
@@ -371,7 +372,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     }
 }
 
-pub trait ViewOps<'a, T: 'a, M: Dim, N: Dim>: View<'a, T, M, N> {
+pub trait ViewOps<'a, M: Dim, N: Dim>: View<'a, M, N> {
     /// Calculates the sum of two matricies by-reference,
     /// returning a new owned [`Matrix`].
     /// ```
@@ -381,9 +382,10 @@ pub trait ViewOps<'a, T: 'a, M: Dim, N: Dim>: View<'a, T, M, N> {
     /// let c = a.as_view().add_ref(&b);
     /// assert_eq!(c, mat![6, 8 ; 10, 12]);
     /// ```
-    fn add_ref<U: 'a, V>(&'a self, rhs: impl IntoView<'a, U, M, N>) -> Matrix<V, M, N>
+    fn add_ref<V, U>(&'a self, rhs: V) -> Matrix<U, M, N>
     where
-        for<'b> &'a T: Add<&'b U, Output = V>,
+        V: IntoView<'a, M, N>,
+        for<'b> &'a Self::Entry: Add<&'b V::Entry, Output = U>,
     {
         let rhs = rhs.into_view();
         Matrix::from_fn_with_dim(self.m(), self.n(), |i, j| &self[[i, j]] + &rhs[[i, j]])
@@ -398,10 +400,11 @@ pub trait ViewOps<'a, T: 'a, M: Dim, N: Dim>: View<'a, T, M, N> {
     /// let c = a.as_view().mul_ref(&b);
     /// assert_eq!(c, mat![32]);
     /// ```
-    fn mul_ref<U: 'a, V, N2: Dim>(&'a self, rhs: impl IntoView<'a, U, N, N2>) -> Matrix<V, M, N2>
+    fn mul_ref<V, U, N2: Dim>(&'a self, rhs: V) -> Matrix<U, M, N2>
     where
-        for<'b> &'a T: Mul<&'b U, Output = V>,
-        V: Sum,
+        V: IntoView<'a, N, N2>,
+        for<'b> &'a Self::Entry: Mul<&'b V::Entry, Output = U>,
+        U: Sum,
     {
         let rhs = rhs.into_view();
         let k = self.n().dim();
@@ -411,4 +414,4 @@ pub trait ViewOps<'a, T: 'a, M: Dim, N: Dim>: View<'a, T, M, N> {
     }
 }
 
-impl<'a, T: 'a, M: Dim, N: Dim, V: View<'a, T, M, N>> ViewOps<'a, T, M, N> for V {}
+impl<'a, M: Dim, N: Dim, V: View<'a, M, N>> ViewOps<'a, M, N> for V {}
