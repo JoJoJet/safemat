@@ -356,7 +356,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// ```
     pub fn add_row_ref<'a, V, U>(&'a self, row: V) -> Matrix<U, M, N>
     where
-        V: IntoRowView<'a, N>,
+        V: IntoRowView<'a, N = N>,
         for<'b> &'a T: Add<&'b V::Entry, Output = U>,
     {
         let row = row.into_view();
@@ -372,7 +372,7 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     }
 }
 
-pub trait ViewOps<'a, M: Dim, N: Dim>: View<'a, M, N> {
+pub trait ViewOps<'a>: View<'a> {
     /// Calculates the sum of two matricies by-reference,
     /// returning a new owned [`Matrix`].
     /// ```
@@ -382,9 +382,9 @@ pub trait ViewOps<'a, M: Dim, N: Dim>: View<'a, M, N> {
     /// let c = a.as_view().add_ref(&b);
     /// assert_eq!(c, mat![6, 8 ; 10, 12]);
     /// ```
-    fn add_ref<V, U>(&'a self, rhs: V) -> Matrix<U, M, N>
+    fn add_ref<V, U>(&'a self, rhs: V) -> Matrix<U, Self::M, Self::N>
     where
-        V: IntoView<'a, M, N>,
+        V: IntoView<'a, M = Self::M, N = Self::N>,
         for<'b> &'a Self::Entry: Add<&'b V::Entry, Output = U>,
     {
         let rhs = rhs.into_view();
@@ -400,9 +400,9 @@ pub trait ViewOps<'a, M: Dim, N: Dim>: View<'a, M, N> {
     /// let c = a.as_view().mul_ref(&b);
     /// assert_eq!(c, mat![32]);
     /// ```
-    fn mul_ref<V, U, N2: Dim>(&'a self, rhs: V) -> Matrix<U, M, N2>
+    fn mul_ref<V, U>(&'a self, rhs: V) -> Matrix<U, Self::M, V::N>
     where
-        V: IntoView<'a, N, N2>,
+        V: IntoView<'a, M = Self::N>,
         for<'b> &'a Self::Entry: Mul<&'b V::Entry, Output = U>,
         U: Sum,
     {
@@ -414,4 +414,4 @@ pub trait ViewOps<'a, M: Dim, N: Dim>: View<'a, M, N> {
     }
 }
 
-impl<'a, M: Dim, N: Dim, V: View<'a, M, N>> ViewOps<'a, M, N> for V {}
+impl<'a, V: View<'a>> ViewOps<'a> for V {}

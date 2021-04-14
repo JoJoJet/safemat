@@ -4,14 +4,16 @@ use crate::{dim, Dim, Matrix};
 
 /// A view into (slice of) a matrix. Or, a reference to a matrix.
 /// # Examples
-pub trait View<'a, M: Dim, N: Dim>: Sized
+pub trait View<'a>: Sized
 where
     Self: Index<usize, Output = Self::Entry> + Index<[usize; 2], Output = Self::Entry>,
 {
+    type M: Dim;
+    type N: Dim;
     type Entry: 'a;
 
-    fn m(&self) -> M;
-    fn n(&self) -> N;
+    fn m(&self) -> Self::M;
+    fn n(&self) -> Self::N;
 
     type Iter: Iterator<Item = &'a Self::Entry>;
     fn iter(&self) -> Self::Iter;
@@ -29,12 +31,12 @@ where
     /// let b = m.col_at(1);
     /// assert!(a.equal(b.transpose_ref()));
     /// ```
-    fn equal<'b, V, M2: Dim, N2: Dim>(&self, rhs: V) -> bool
+    fn equal<'b, V>(&self, rhs: V) -> bool
     where
-        V: View<'b, M2, N2>,
+        V: View<'b>,
         Self::Entry: PartialEq<V::Entry>,
-        M: PartialEq<M2>,
-        N: PartialEq<N2>,
+        Self::M: PartialEq<V::M>,
+        Self::N: PartialEq<V::N>,
     {
         if self.m() != rhs.m() || self.n() != rhs.n() {
             return false;
@@ -57,7 +59,7 @@ where
     /// let c = a.col_at(2).to_matrix();
     /// assert_eq!(c, mat![3; 7; 11]);
     /// ```
-    fn to_matrix(&self) -> Matrix<Self::Entry, M, N>
+    fn to_matrix(&self) -> Matrix<Self::Entry, Self::M, Self::N>
     where
         Self::Entry: Clone,
     {
@@ -67,7 +69,7 @@ where
     /// Gets an interface for accessing a transposed form of this matrix;
     /// does not actually rearrange any data.
     #[inline]
-    fn transpose_ref(self) -> Transpose<M, N, Self> {
+    fn transpose_ref(self) -> Transpose<Self::M, Self::N, Self> {
         Transpose {
             m: self.m(),
             _n: self.n(),
@@ -99,20 +101,20 @@ pub struct Transpose<M, N, V> {
     _n: N,
 }
 
-impl<'a, M, N, V> View<'a, N, M> for Transpose<M, N, V>
+impl<'a, V> View<'a> for Transpose<V::M, V::N, V>
 where
-    M: Dim,
-    N: Dim,
-    V: View<'a, M, N>,
+    V: View<'a>,
 {
+    type M = V::N;
+    type N = V::M;
     type Entry = V::Entry;
 
     #[inline]
-    fn m(&self) -> N {
+    fn m(&self) -> V::N {
         self.view.n()
     }
     #[inline]
-    fn n(&self) -> M {
+    fn n(&self) -> V::M {
         self.view.m()
     }
 
@@ -148,7 +150,9 @@ where
     }
 }
 
-impl<'a, T, M: Dim, N: Dim> View<'a, M, N> for &'a Matrix<T, M, N> {
+impl<'a, T, M: Dim, N: Dim> View<'a> for &'a Matrix<T, M, N> {
+    type M = M;
+    type N = N;
     type Entry = T;
 
     #[inline]
@@ -169,9 +173,11 @@ impl<'a, T, M: Dim, N: Dim> View<'a, M, N> for &'a Matrix<T, M, N> {
 
 /// A type from which you can obtain a [`View`] of a specific size.
 /// This is implemented by [`Matrix`] as well as every `View` type.
-pub trait IntoView<'a, M: Dim, N: Dim>: Sized + 'a {
+pub trait IntoView<'a>: Sized + 'a {
     type Entry: 'a;
-    type View: View<'a, M, N, Entry = Self::Entry> + 'a;
+    type M: Dim;
+    type N: Dim;
+    type View: View<'a, M = Self::M, N = Self::N, Entry = Self::Entry> + 'a;
     /// Gets a [`View`] from this instance.
     ///
     /// If the implementing type is already a `View`,
@@ -179,10 +185,9 @@ pub trait IntoView<'a, M: Dim, N: Dim>: Sized + 'a {
     fn into_view(self) -> Self::View;
 }
 
-impl<'a, M: Dim, N: Dim, V> IntoView<'a, M, N> for V
-where
-    V: View<'a, M, N> + 'a,
-{
+impl<'a, V: View<'a> + 'a> IntoView<'a> for V {
+    type M = V::M;
+    type N = V::N;
     type Entry = V::Entry;
     type View = Self;
     #[inline]
@@ -191,13 +196,13 @@ where
     }
 }
 
-pub trait RowView<'a, N: Dim>: View<'a, dim!(1), N> {}
+pub trait RowView<'a>: View<'a, M = dim!(1)> {}
 
-impl<'a, T: 'a, N: Dim, V> RowView<'a, N> for V where V: View<'a, dim!(1), N, Entry = T> {}
+impl<'a, T: 'a, V> RowView<'a> for V where V: View<'a, M = dim!(1), Entry = T> {}
 
-pub trait IntoRowView<'a, N: Dim>: IntoView<'a, dim!(1), N> {}
+pub trait IntoRowView<'a>: IntoView<'a, M = dim!(1)> {}
 
-impl<'a, N: Dim, I> IntoRowView<'a, N> for I where I: IntoView<'a, dim!(1), N> {}
+impl<'a, I> IntoRowView<'a> for I where I: IntoView<'a, M = dim!(1)> {}
 
 #[derive(Debug)]
 pub struct RowSlice<'a, T, M, N> {
@@ -217,7 +222,9 @@ impl<T, M, N> Clone for RowSlice<'_, T, M, N> {
     }
 }
 
-impl<'a, T, M: Dim, N: Dim> View<'a, dim!(1), N> for RowSlice<'a, T, M, N> {
+impl<'a, T, M: Dim, N: Dim> View<'a> for RowSlice<'a, T, M, N> {
+    type M = dim!(1);
+    type N = N;
     type Entry = T;
 
     #[inline]
@@ -280,9 +287,9 @@ where
     }
 }
 
-pub trait ColumnView<'a, M: Dim>: View<'a, M, dim!(1)> {}
+pub trait ColumnView<'a>: View<'a, N = dim!(1)> {}
 
-impl<'a, T: 'a, M: Dim, V> ColumnView<'a, M> for V where V: View<'a, M, dim!(1), Entry = T> {}
+impl<'a, T: 'a, V> ColumnView<'a> for V where V: View<'a, N = dim!(1), Entry = T> {}
 
 #[derive(Debug)]
 pub struct ColumnSlice<'a, T, M, N> {
@@ -301,7 +308,9 @@ impl<T, M, N> Clone for ColumnSlice<'_, T, M, N> {
     }
 }
 
-impl<'a, T, M: Dim, N: Dim> View<'a, M, dim!(1)> for ColumnSlice<'a, T, M, N> {
+impl<'a, T, M: Dim, N: Dim> View<'a> for ColumnSlice<'a, T, M, N> {
+    type M = M;
+    type N = dim!(1);
     type Entry = T;
 
     #[inline]
