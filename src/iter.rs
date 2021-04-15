@@ -400,7 +400,7 @@ pub struct Columns<'a, T, M: Dim, N: Dim> {
 }
 
 impl<'a, T, M: Dim, N: Dim> Iterator for Columns<'a, T, M, N> {
-    type Item = ColumnSlice<'a, T, M, N>;
+    type Item = crate::view::col::ColumnSlice<'a, T, M, N>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.j < self.mat.n.dim() {
             let j = self.j;

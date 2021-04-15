@@ -340,40 +340,22 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
         )
         .unwrap()
     }
-
-    /// Adds the specified row vector to each row of this matrix,
-    /// returning a new matrix without moving anything
-    /// ```
-    /// # use safemat::prelude::*;
-    /// let a = Matrix::from_array([
-    ///     [ 1, 2, 3 ],
-    ///     [ 4, 5, 6 ],
-    /// ]);
-    /// let r = mat![ 1, 2, 3 ];
-    ///
-    /// assert_eq!(a.add_row_ref(&r), Matrix::from_array([
-    ///     [ 2, 4, 6 ],
-    ///     [ 5, 7, 9 ],
-    /// ]));
-    /// ```
-    pub fn add_row_ref<'a, V, U>(&'a self, row: V) -> Matrix<U, M, N>
-    where
-        V: RowView<'a, N = N>,
-        for<'b> &'a T: Add<&'b V::Entry, Output = U>,
-    {
-        let n = self.n.dim();
-        assert_eq!(n, row.n().dim());
-        Matrix::try_from_iter_with_dim(
-            self.m,
-            self.n,
-            self.rows()
-                .flat_map(|r1| r1.iter().zip(row.iter()).map(|(t, u)| t + u)),
-        )
-        .unwrap()
-    }
 }
 
+/// A matrix [`View`] that can have extra operations performed on it.
+/// Most `View` types are also `ViewOps`, except for, notably, [`Transpose`] and [`Entry`]
+///
+/// Even types that are not `ViewOps` can still usually be passed as the
+/// second argument to an operation.
+///
+/// [`Transpose`]: crate::view::Transpose
+/// [`Entry`]: crate::view::Entry
 pub trait ViewOps<'a>: View<'a> {
+    type Row: RowView<'a, Entry = Self::Entry, N = Self::N>;
+    type RowsIter: Iterator<Item = Self::Row>;
+    /// Gets an iterator over the rows of this [`View`].
+    fn rows(self) -> Self::RowsIter;
+
     /// Calculates the sum of two matricies by-reference,
     /// returning a new owned [`Matrix`].
     /// ```
@@ -405,6 +387,34 @@ pub trait ViewOps<'a>: View<'a> {
     {
         Matrix::from_fn_with_dim(self.m(), self.n(), |i, j| &self[[i, j]] + u)
     }
+    /// Adds the specified row vector to each row of this matrix,
+    /// returning a new matrix without moving anything
+    /// ```
+    /// # use safemat::prelude::*;
+    /// let a = Matrix::from_array([
+    ///     [ 1, 2, 3 ],
+    ///     [ 4, 5, 6 ],
+    /// ]);
+    /// let r = mat![ 1, 2, 3 ];
+    ///
+    /// assert_eq!(a.as_view().add_row_ref(&r), Matrix::from_array([
+    ///     [ 2, 4, 6 ],
+    ///     [ 5, 7, 9 ],
+    /// ]));
+    /// ```
+    fn add_row_ref<V, U>(&'a self, rhs: V) -> Matrix<U, Self::M, Self::N>
+    where
+        V: RowView<'a, N = Self::N>,
+        for<'b> &'a Self::Entry: Add<&'b V::Entry, Output = U>,
+    {
+        Matrix::try_from_iter_with_dim(
+            self.m(),
+            self.n(),
+            self.rows()
+                .flat_map(|r| r.iter().zip(rhs.iter()).map(|(a, b)| a + b)),
+        )
+        .unwrap()
+    }
     /// Calculates the matrix product of two matrices by-reference,
     /// returning a new owned [`Matrix`].
     /// ```
@@ -428,4 +438,33 @@ pub trait ViewOps<'a>: View<'a> {
     }
 }
 
-impl<'a, V: View<'a>> ViewOps<'a> for V {}
+use crate::{
+    iter::Rows,
+    view::{col::ColumnSlice, Entry, RowSlice},
+};
+impl<'a, T, M: Dim, N: Dim> ViewOps<'a> for &'a Matrix<T, M, N> {
+    type Row = RowSlice<'a, T, M, N>;
+    type RowsIter = Rows<'a, T, M, N>;
+    #[inline]
+    fn rows(self) -> Self::RowsIter {
+        self.rows()
+    }
+}
+
+impl<'a, T, M: Dim, N: Dim> ViewOps<'a> for RowSlice<'a, T, M, N> {
+    type Row = Self;
+    type RowsIter = std::iter::Once<Self>;
+    #[inline]
+    fn rows(self) -> Self::RowsIter {
+        std::iter::once(self)
+    }
+}
+
+impl<'a, T, M: Dim, N: Dim> ViewOps<'a> for ColumnSlice<'a, T, M, N> {
+    type Row = Entry<'a, T, M, N>;
+    type RowsIter = crate::view::col::RowsIter<'a, T, M, N>;
+    #[inline]
+    fn rows(self) -> Self::RowsIter {
+        self.entries()
+    }
+}
