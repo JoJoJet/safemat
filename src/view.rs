@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, ops::Index};
 
-use crate::{dim, Dim, Matrix};
+use crate::{Dim, Matrix};
 
 /// A view into (slice of) a matrix. Or, a reference to a matrix.
 ///
@@ -107,6 +107,26 @@ where
             view: self,
             _p: PhantomData,
         }
+    }
+}
+
+pub mod row;
+
+pub mod col;
+
+impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
+    #[inline]
+    pub fn as_view(&self) -> &Self {
+        self
+    }
+
+    pub fn row_at(&self, i: usize) -> row::RowSlice<'_, T, M, N> {
+        row::RowSlice::new(self, i)
+    }
+
+    #[inline]
+    pub fn col_at(&self, j: usize) -> col::ColumnSlice<'_, T, M, N> {
+        col::ColumnSlice::new(self, j)
     }
 }
 
@@ -295,355 +315,98 @@ impl<'a, T, M: Dim, N: Dim> View<'a> for &'a Matrix<T, M, N> {
     }
 }
 
-pub trait RowView<'a>: View<'a, M = dim!(1)> {}
+pub mod entry {
+    use std::ops::Index;
 
-impl<'a, T: 'a, V> RowView<'a> for V where V: View<'a, M = dim!(1), Entry = T> {}
+    use super::View;
+    use crate::{dim, dim::Dim, Matrix};
 
-#[derive(Debug)]
-pub struct RowSlice<'a, T, M, N> {
-    mat: &'a Matrix<T, M, N>,
-    i: usize,
-}
-
-impl<T, M, N> Copy for RowSlice<'_, T, M, N> {}
-
-impl<T, M, N> Clone for RowSlice<'_, T, M, N> {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self {
-            mat: self.mat,
-            i: self.i,
-        }
-    }
-}
-
-impl<'a, T, M: Dim, N: Dim> View<'a> for RowSlice<'a, T, M, N> {
-    type M = dim!(1);
-    type N = N;
-    type Entry = T;
-
-    #[inline]
-    fn m(&self) -> dim!(1) {
-        dim!(1)
-    }
-    #[inline]
-    fn n(&self) -> N {
-        self.mat.n
-    }
-
-    #[inline]
-    fn get(&self, i: usize, j: usize) -> Option<&'a T> {
-        if i == 0 && j < self.n().dim() {
-            Some(&self.mat.items[self.i * self.n().dim() + j])
-        } else {
-            None
-        }
-    }
-
-    type Iter = std::slice::Iter<'a, T>;
-    fn iter(&self) -> Self::Iter {
-        let a = self.i * self.mat.n.dim();
-        let b = a + self.mat.n.dim();
-        self.mat.items[a..b].iter()
-    }
-}
-
-impl<T, M: Dim, N: Dim> Index<usize> for RowSlice<'_, T, M, N> {
-    type Output = T;
-    #[inline]
-    fn index(&self, j: usize) -> &T {
-        &self.mat[[self.i, j]]
-    }
-}
-impl<T, M: Dim, N: Dim> Index<[usize; 2]> for RowSlice<'_, T, M, N> {
-    type Output = T;
-    #[inline]
-    fn index(&self, [i, j]: [usize; 2]) -> &T {
-        assert_eq!(i, 0);
-        &self.mat[[self.i, j]]
-    }
-}
-
-impl<'a, 'b, T, M: Dim, N: Dim, Rhs> PartialEq<Rhs> for RowSlice<'a, T, M, N>
-where
-    Rhs: View<'b>,
-    T: PartialEq<Rhs::Entry>,
-    dim!(1): PartialEq<Rhs::M>,
-    N: PartialEq<Rhs::N>,
-{
-    #[inline]
-    fn eq(&self, rhs: &Rhs) -> bool {
-        self.equal(*rhs)
-    }
-}
-
-pub mod col {
-    use super::*;
-
-    pub trait ColumnView<'a>: View<'a, N = dim!(1)> {}
-
-    impl<'a, T: 'a, V> ColumnView<'a> for V where V: View<'a, N = dim!(1), Entry = T> {}
-
+    
+    /// A [`View`] referring to a single entry in a matrix.
+    /// # Examples
+    /// ```
+    /// # use safemat::{prelude::*, view::entry::Entry};
+    /// let m = mat![1, 2; 3, 4];
+    /// assert_eq!(Entry::new(&m, 0, 1), &mat![2]);
+    /// assert_eq!(Entry::new(&m, 1, 0), &mat![3]);
     #[derive(Debug)]
-    pub struct ColumnSlice<'a, T, M, N> {
+    pub struct Entry<'a, T, M, N> {
         mat: &'a Matrix<T, M, N>,
+        i: usize,
         j: usize,
     }
 
-    impl<'a, T, M: Dim, N: Dim> ColumnSlice<'a, T, M, N> {
-        pub(crate) fn new(mat: &'a Matrix<T, M, N>, j: usize) -> Self {
-            assert!(j < mat.n.dim());
-            Self { mat, j }
-        }
-
-        /// Gets an iterator over the [`Entry`]s in this column slice.
+    impl<'a, T, M: Dim, N: Dim> Entry<'a, T, M, N> {
         #[inline]
-        pub fn entries(self) -> RowsIter<'a, T, M, N> {
-            RowsIter {
-                mat: self.mat,
-                j: self.j,
-                i: 0,
-            }
+        pub fn new(mat: &'a Matrix<T, M, N>, i: usize, j: usize) -> Self {
+            assert!(i < mat.m.dim());
+            assert!(j < mat.n.dim());
+            Self { mat, i, j }
         }
     }
 
-    impl<T, M, N> Copy for ColumnSlice<'_, T, M, N> {}
+    impl<T, M, N> Copy for Entry<'_, T, M, N> {}
 
-    impl<T, M, N> Clone for ColumnSlice<'_, T, M, N> {
+    impl<T, M, N> Clone for Entry<'_, T, M, N> {
         fn clone(&self) -> Self {
             Self {
                 mat: self.mat,
+                i: self.i,
                 j: self.j,
             }
         }
     }
 
-    impl<'a, T, M: Dim, N: Dim> View<'a> for ColumnSlice<'a, T, M, N> {
-        type M = M;
-        type N = dim!(1);
+    impl<'a, T, M: Dim, N: Dim> View<'a> for Entry<'a, T, M, N> {
         type Entry = T;
-
-        #[inline]
-        fn m(&self) -> M {
-            self.mat.m
+        type M = dim!(1);
+        type N = dim!(1);
+        fn m(&self) -> dim!(1) {
+            dim!(1)
         }
-        #[inline]
         fn n(&self) -> dim!(1) {
             dim!(1)
         }
 
-        #[inline]
         fn get(&self, i: usize, j: usize) -> Option<&'a T> {
-            if j == 0 && i < self.m().dim() {
-                Some(&self.mat.items[i * self.mat.n.dim() + self.j])
+            if i == 0 && j == 0 {
+                Some(&self.mat.items[self.i * self.mat.n.dim() + self.j])
             } else {
                 None
             }
         }
 
-        type Iter = ColumnSliceIter<'a, T, M, N>;
-        #[inline]
+        type Iter = std::iter::Once<&'a T>;
         fn iter(&self) -> Self::Iter {
-            ColumnSliceIter {
-                mat: self.mat,
-                j: self.j,
-                i: 0,
-            }
+            std::iter::once(self.get(0, 0).unwrap())
         }
     }
 
-    impl<T, M: Dim, N: Dim> Index<usize> for ColumnSlice<'_, T, M, N> {
+    impl<T, M: Dim, N: Dim> Index<usize> for Entry<'_, T, M, N> {
         type Output = T;
-        #[inline]
         fn index(&self, i: usize) -> &T {
-            &self.mat[[i, self.j]]
+            assert_eq!(i, 0);
+            &self.mat[[self.i, self.j]]
         }
     }
-
-    impl<T, M: Dim, N: Dim> Index<[usize; 2]> for ColumnSlice<'_, T, M, N> {
+    impl<T, M: Dim, N: Dim> Index<[usize; 2]> for Entry<'_, T, M, N> {
         type Output = T;
-        #[inline]
         fn index(&self, [i, j]: [usize; 2]) -> &T {
+            assert_eq!(i, 0);
             assert_eq!(j, 0);
-            &self.mat[[i, self.j]]
+            &self.mat[[self.i, self.j]]
         }
     }
 
-    impl<'a, 'b, T, M: Dim, N: Dim, Rhs> PartialEq<Rhs> for ColumnSlice<'a, T, M, N>
+    impl<'a, T, M: Dim, N: Dim, V> PartialEq<V> for Entry<'a, T, M, N>
     where
-        Rhs: View<'b>,
-        T: PartialEq<Rhs::Entry>,
-        M: PartialEq<Rhs::M>,
-        dim!(1): PartialEq<Rhs::N>,
+        V: View<'a>,
+        T: PartialEq<V::Entry>,
+        dim!(1): PartialEq<V::M> + PartialEq<V::N>,
     {
         #[inline]
-        fn eq(&self, rhs: &Rhs) -> bool {
+        fn eq(&self, rhs: &V) -> bool {
             self.equal(*rhs)
         }
-    }
-
-    pub struct ColumnSliceIter<'a, T, M, N> {
-        mat: &'a Matrix<T, M, N>,
-        j: usize,
-        i: usize,
-    }
-
-    impl<'a, T, M: Dim, N: Dim> Iterator for ColumnSliceIter<'a, T, M, N> {
-        type Item = &'a T;
-        #[inline]
-        fn next(&mut self) -> Option<Self::Item> {
-            let i = self.i;
-            if i < self.mat.m.dim() {
-                self.i += 1;
-                Some(&self.mat.items[i * self.mat.n.dim() + self.j])
-            } else {
-                None
-            }
-        }
-        #[inline]
-        fn size_hint(&self) -> (usize, Option<usize>) {
-            let len = self.len();
-            (len, Some(len))
-        }
-    }
-
-    impl<T, M: Dim, N: Dim> ExactSizeIterator for ColumnSliceIter<'_, T, M, N> {
-        #[inline]
-        fn len(&self) -> usize {
-            self.mat.m.dim() - self.i
-        }
-    }
-
-    pub struct RowsIter<'a, T, M, N> {
-        mat: &'a Matrix<T, M, N>,
-        j: usize,
-        i: usize,
-    }
-
-    impl<'a, T, M: Dim, N: Dim> Iterator for RowsIter<'a, T, M, N> {
-        type Item = super::Entry<'a, T, M, N>;
-        #[inline]
-        fn next(&mut self) -> Option<Self::Item> {
-            let i = self.i;
-            if i < self.mat.m.dim() {
-                self.i += 1;
-                Some(self.mat.entry(i, self.j))
-            } else {
-                None
-            }
-        }
-        #[inline]
-        fn size_hint(&self) -> (usize, Option<usize>) {
-            let len = self.len();
-            (len, Some(len))
-        }
-    }
-    impl<T, M: Dim, N: Dim> ExactSizeIterator for RowsIter<'_, T, M, N> {
-        #[inline]
-        fn len(&self) -> usize {
-            self.mat.m.dim() - self.i
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Entry<'a, T, M, N> {
-    mat: &'a Matrix<T, M, N>,
-    i: usize,
-    j: usize,
-}
-
-impl<T, M, N> Copy for Entry<'_, T, M, N> {}
-
-impl<T, M, N> Clone for Entry<'_, T, M, N> {
-    fn clone(&self) -> Self {
-        Self {
-            mat: self.mat,
-            i: self.i,
-            j: self.j,
-        }
-    }
-}
-
-impl<'a, T, M: Dim, N: Dim> View<'a> for Entry<'a, T, M, N> {
-    type Entry = T;
-    type M = dim!(1);
-    type N = dim!(1);
-    fn m(&self) -> dim!(1) {
-        dim!(1)
-    }
-    fn n(&self) -> dim!(1) {
-        dim!(1)
-    }
-
-    fn get(&self, i: usize, j: usize) -> Option<&'a T> {
-        if i == 0 && j == 0 {
-            Some(&self.mat.items[self.i * self.mat.n.dim() + self.j])
-        } else {
-            None
-        }
-    }
-
-    type Iter = std::iter::Once<&'a T>;
-    fn iter(&self) -> Self::Iter {
-        std::iter::once(self.get(0, 0).unwrap())
-    }
-}
-
-impl<T, M: Dim, N: Dim> Index<usize> for Entry<'_, T, M, N> {
-    type Output = T;
-    fn index(&self, i: usize) -> &T {
-        assert_eq!(i, 0);
-        &self.mat[[self.i, self.j]]
-    }
-}
-impl<T, M: Dim, N: Dim> Index<[usize; 2]> for Entry<'_, T, M, N> {
-    type Output = T;
-    fn index(&self, [i, j]: [usize; 2]) -> &T {
-        assert_eq!(i, 0);
-        assert_eq!(j, 0);
-        &self.mat[[self.i, self.j]]
-    }
-}
-
-impl<'a, T, M: Dim, N: Dim, V> PartialEq<V> for Entry<'a, T, M, N>
-where
-    V: View<'a>,
-    T: PartialEq<V::Entry>,
-    dim!(1): PartialEq<V::M> + PartialEq<V::N>,
-{
-    #[inline]
-    fn eq(&self, rhs: &V) -> bool {
-        self.equal(*rhs)
-    }
-}
-
-impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
-    #[inline]
-    pub fn as_view(&self) -> &Self {
-        self
-    }
-
-    pub fn row_at(&self, i: usize) -> RowSlice<'_, T, M, N> {
-        assert!(i < self.m.dim());
-        RowSlice { mat: self, i }
-    }
-
-    #[inline]
-    pub fn col_at(&self, j: usize) -> col::ColumnSlice<'_, T, M, N> {
-        col::ColumnSlice::new(self, j)
-    }
-
-    /// Gets a reference to a single entry in this matrix, as a [`View`].
-    /// # Examples
-    /// ```
-    /// # use safemat::prelude::*;
-    /// let m = mat![1, 2; 3, 4];
-    /// assert_eq!(m.entry(0, 1), &mat![2]);
-    /// assert_eq!(m.entry(1, 0), &mat![3]);
-    pub fn entry(&self, i: usize, j: usize) -> Entry<'_, T, M, N> {
-        assert!(i < self.m.dim());
-        assert!(j < self.n.dim());
-        Entry { mat: self, i, j }
     }
 }

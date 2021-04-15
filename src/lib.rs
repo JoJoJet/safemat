@@ -18,7 +18,7 @@ pub mod prelude {
         dim::Dim,
         mat,
         ops::ViewOps,
-        view::{col::ColumnView, RowView, View},
+        view::{col::ColumnView, row::RowView, View},
         Matrix,
     };
 }

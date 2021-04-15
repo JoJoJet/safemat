@@ -1,5 +1,4 @@
 use super::*;
-use crate::view::*;
 
 use std::{iter::FusedIterator, marker::PhantomData};
 
@@ -312,7 +311,7 @@ pub struct Rows<'a, T, M: Dim, N: Dim> {
 }
 
 impl<'a, T, M: Dim, N: Dim> Iterator for Rows<'a, T, M, N> {
-    type Item = RowSlice<'a, T, M, N>;
+    type Item = view::row::RowSlice<'a, T, M, N>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.i < self.mat.m.dim() {
             let i = self.i;

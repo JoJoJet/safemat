@@ -6,7 +6,7 @@ use std::{
 use crate::{
     dim,
     dim::Fixed,
-    view::{RowView, View},
+    view::{row::RowView, View},
     Dim, Matrix, RowVec,
 };
 
@@ -440,7 +440,7 @@ pub trait ViewOps<'a>: View<'a> {
 
 use crate::{
     iter::Rows,
-    view::{col::ColumnSlice, Entry, RowSlice},
+    view::{col::ColumnSlice, row::RowSlice, entry::Entry},
 };
 impl<'a, T, M: Dim, N: Dim> ViewOps<'a> for &'a Matrix<T, M, N> {
     type Row = RowSlice<'a, T, M, N>;
