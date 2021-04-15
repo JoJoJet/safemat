@@ -18,12 +18,12 @@ where
     fn m(&self) -> Self::M;
     fn n(&self) -> Self::N;
 
-    type Iter: Iterator<Item = &'a Self::Entry>;
-    fn iter(&self) -> Self::Iter;
-
     /// Gets the entry at specified indices,
     /// or returns nothing if the index is invalid.
     fn get(&self, i: usize, j: usize) -> Option<&'a Self::Entry>;
+
+    type Iter: Iterator<Item = &'a Self::Entry>;
+    fn iter(&self) -> Self::Iter;
 
     /// Checks if the two views are equal to one another.
     /// # Examples
@@ -494,6 +494,78 @@ impl<T, M: Dim, N: Dim> ExactSizeIterator for ColumnSliceIter<'_, T, M, N> {
     }
 }
 
+#[derive(Debug)]
+pub struct Entry<'a, T, M, N> {
+    mat: &'a Matrix<T, M, N>,
+    i: usize,
+    j: usize,
+}
+
+impl<T, M, N> Copy for Entry<'_, T, M, N> {}
+
+impl<T, M, N> Clone for Entry<'_, T, M, N> {
+    fn clone(&self) -> Self {
+        Self {
+            mat: self.mat,
+            i: self.i,
+            j: self.j,
+        }
+    }
+}
+
+impl<'a, T, M: Dim, N: Dim> View<'a> for Entry<'a, T, M, N> {
+    type Entry = T;
+    type M = dim!(1);
+    type N = dim!(1);
+    fn m(&self) -> dim!(1) {
+        dim!(1)
+    }
+    fn n(&self) -> dim!(1) {
+        dim!(1)
+    }
+
+    fn get(&self, i: usize, j: usize) -> Option<&'a T> {
+        if i == 0 && j == 0 {
+            Some(&self.mat.items[self.i * self.mat.n.dim() + self.j])
+        } else {
+            None
+        }
+    }
+
+    type Iter = std::iter::Once<&'a T>;
+    fn iter(&self) -> Self::Iter {
+        std::iter::once(self.get(0, 0).unwrap())
+    }
+}
+
+impl<T, M: Dim, N: Dim> Index<usize> for Entry<'_, T, M, N> {
+    type Output = T;
+    fn index(&self, i: usize) -> &T {
+        assert_eq!(i, 0);
+        &self.mat[[self.i, self.j]]
+    }
+}
+impl<T, M: Dim, N: Dim> Index<[usize; 2]> for Entry<'_, T, M, N> {
+    type Output = T;
+    fn index(&self, [i, j]: [usize; 2]) -> &T {
+        assert_eq!(i, 0);
+        assert_eq!(j, 0);
+        &self.mat[[self.i, self.j]]
+    }
+}
+
+impl<'a, T, M: Dim, N: Dim, V> PartialEq<V> for Entry<'a, T, M, N>
+where
+    V: View<'a>,
+    T: PartialEq<V::Entry>,
+    dim!(1): PartialEq<V::M> + PartialEq<V::N>,
+{
+    #[inline]
+    fn eq(&self, rhs: &V) -> bool {
+        self.equal(*rhs)
+    }
+}
+
 impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     #[inline]
     pub fn as_view(&self) -> &Self {
@@ -508,5 +580,18 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     pub fn col_at(&self, j: usize) -> ColumnSlice<'_, T, M, N> {
         assert!(j < self.n.dim());
         ColumnSlice { mat: self, j }
+    }
+
+    /// Gets a reference to a single entry in this matrix, as a [`View`].
+    /// # Examples
+    /// ```
+    /// # use safemat::prelude::*;
+    /// let m = mat![1, 2; 3, 4];
+    /// assert_eq!(m.entry(0, 1), &mat![2]);
+    /// assert_eq!(m.entry(1, 0), &mat![3]);
+    pub fn entry(&self, i: usize, j: usize) -> Entry<'_, T, M, N> {
+        assert!(i < self.m.dim());
+        assert!(j < self.n.dim());
+        Entry { mat: self, i, j }
     }
 }
