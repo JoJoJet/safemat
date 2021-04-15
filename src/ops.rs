@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     dim::Fixed,
-    view::{IntoRowView, IntoView, View},
+    view::{RowView, View},
     Dim, Matrix, RowVec,
 };
 
@@ -290,22 +290,6 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
             .unwrap()
     }
 
-    /// Adds a scalar value to each entry in this matrix,
-    /// then returns a new matrix without moving anything.
-    /// ```
-    /// # use safemat::*;
-    /// let a = mat![ 1, 2 ; 3, 4 ];
-    /// let b = a.add_scalar_ref(&1);
-    /// assert_eq!(b, mat![ 2, 3 ; 4, 5 ]);
-    /// ```
-    #[inline]
-    pub fn add_scalar_ref<U, V>(&self, u: &U) -> Matrix<V, M, N>
-    where
-        for<'a, 'b> &'a T: Add<&'b U, Output = V>,
-    {
-        Matrix::try_from_iter_with_dim(self.m, self.n, self.iter().map(|t| t + u)).unwrap()
-    }
-
     /// Adds the specified row vector to each row of this matrix.
     /// ```
     /// # use safemat::*;
@@ -356,10 +340,9 @@ impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// ```
     pub fn add_row_ref<'a, V, U>(&'a self, row: V) -> Matrix<U, M, N>
     where
-        V: IntoRowView<'a, N = N>,
+        V: RowView<'a, N = N>,
         for<'b> &'a T: Add<&'b V::Entry, Output = U>,
     {
-        let row = row.into_view();
         let n = self.n.dim();
         assert_eq!(n, row.n().dim());
         Matrix::try_from_iter_with_dim(
@@ -384,11 +367,25 @@ pub trait ViewOps<'a>: View<'a> {
     /// ```
     fn add_ref<V, U>(&'a self, rhs: V) -> Matrix<U, Self::M, Self::N>
     where
-        V: IntoView<'a, M = Self::M, N = Self::N>,
+        V: View<'a, M = Self::M, N = Self::N>,
         for<'b> &'a Self::Entry: Add<&'b V::Entry, Output = U>,
     {
-        let rhs = rhs.into_view();
         Matrix::from_fn_with_dim(self.m(), self.n(), |i, j| &self[[i, j]] + &rhs[[i, j]])
+    }
+    /// Adds a scalar value to each entry in this view,
+    /// then returns a new owned [`Matrix`].
+    /// ```
+    /// # use safemat::prelude::*;
+    /// let a = mat![ 1, 2 ; 3, 4 ];
+    /// let b = a.as_view().add_scalar_ref(&1);
+    /// assert_eq!(b, mat![ 2, 3 ; 4, 5 ]);
+    /// ```
+    #[inline]
+    fn add_scalar_ref<'b, U, V>(&'a self, u: &'b U) -> Matrix<V, Self::M, Self::N>
+    where
+        &'a Self::Entry: Add<&'b U, Output = V>,
+    {
+        Matrix::from_fn_with_dim(self.m(), self.n(), |i, j| &self[[i, j]] + u)
     }
     /// Calculates the matrix product of two matrices by-reference,
     /// returning a new owned [`Matrix`].
@@ -402,11 +399,10 @@ pub trait ViewOps<'a>: View<'a> {
     /// ```
     fn mul_ref<V, U>(&'a self, rhs: V) -> Matrix<U, Self::M, V::N>
     where
-        V: IntoView<'a, M = Self::N>,
+        V: View<'a, M = Self::N>,
         for<'b> &'a Self::Entry: Mul<&'b V::Entry, Output = U>,
         U: Sum,
     {
-        let rhs = rhs.into_view();
         let k = self.n().dim();
         Matrix::from_fn_with_dim(self.m(), rhs.n(), |i, j| {
             (0..k).map(|k| &self[[i, k]] * &rhs[[k, j]]).sum()

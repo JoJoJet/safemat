@@ -295,38 +295,9 @@ impl<'a, T, M: Dim, N: Dim> View<'a> for &'a Matrix<T, M, N> {
     }
 }
 
-/// A type from which you can obtain a [`View`] of a specific size.
-/// This is implemented by [`Matrix`] as well as every `View` type.
-pub trait IntoView<'a>: Sized + 'a {
-    type Entry: 'a;
-    type M: Dim;
-    type N: Dim;
-    type View: View<'a, M = Self::M, N = Self::N, Entry = Self::Entry> + 'a;
-    /// Gets a [`View`] from this instance.
-    ///
-    /// If the implementing type is already a `View`,
-    /// it should simply return itself.
-    fn into_view(self) -> Self::View;
-}
-
-impl<'a, V: View<'a> + 'a> IntoView<'a> for V {
-    type M = V::M;
-    type N = V::N;
-    type Entry = V::Entry;
-    type View = Self;
-    #[inline]
-    fn into_view(self) -> Self {
-        self
-    }
-}
-
 pub trait RowView<'a>: View<'a, M = dim!(1)> {}
 
 impl<'a, T: 'a, V> RowView<'a> for V where V: View<'a, M = dim!(1), Entry = T> {}
-
-pub trait IntoRowView<'a>: IntoView<'a, M = dim!(1)> {}
-
-impl<'a, I> IntoRowView<'a> for I where I: IntoView<'a, M = dim!(1)> {}
 
 #[derive(Debug)]
 pub struct RowSlice<'a, T, M, N> {
