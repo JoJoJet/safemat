@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::{
+    dim,
     dim::Fixed,
     view::{RowView, View},
     Dim, Matrix, RowVec,
@@ -12,6 +13,23 @@ use crate::{
 #[derive(Debug, thiserror::Error)]
 #[error("lhs n: {0}, rhs m: {1}")]
 pub struct MulError(usize, usize);
+
+impl<T> Matrix<T, dim!(1), dim!(1)> {
+    /// Moves the only element out of this 1x1 matrix.
+    /// # Examples
+    /// ```
+    /// # use safemat::prelude::*;
+    /// let a = mat![1, 2, 3];
+    /// let b = mat![3; 2; 1];
+    /// let c = &a * &b;
+    /// assert_eq!(c.scalar(), 10);
+    /// ```
+    pub fn scalar(self) -> T {
+        Vec::from(self.items)
+            .pop()
+            .expect("there must be an item since this is a 1x1 matrix")
+    }
+}
 
 impl<T, M: Dim, N: Dim> Matrix<T, M, N> {
     /// Returns the transpose of this matrix.
