@@ -39,8 +39,9 @@ where
     N2: Dim,
 {
     fn eq(&self, rhs: &Matrix<T, M2, N2>) -> bool {
-        debug_assert_eq!(self.m.dim(), rhs.m.dim());
-        debug_assert_eq!(self.n.dim(), rhs.n.dim());
+        if self.m != rhs.m || self.n != rhs.n {
+            return false;
+        }
         self.items.eq(&rhs.items)
     }
 }
